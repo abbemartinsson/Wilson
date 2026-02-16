@@ -1,1 +1,1 @@
-# Kruse
+# Fråga Kruse!
