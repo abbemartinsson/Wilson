@@ -201,14 +201,14 @@ AI/NLP: valfri modell eller regelbaserat
 # 11. Byggordning
 
 ## Steg 1 – Use cases ✔
-Visa tillgänglighet kommande veckor
-Visa belastning per person
-Ge enkel prognos framåt
-Visa projektstatus
-Svara på frågor om teamets arbete
-Hämta information från integrerade system
-Ta hänsyn till semester/ledighet
-Möjlighet att boka eller föreslå mötestider.
+- Visa tillgänglighet kommande veckor
+- Visa belastning per person
+- Ge enkel prognos framåt
+- Visa projektstatus
+- Svara på frågor om teamets arbete
+- Hämta information från integrerade system
+- Ta hänsyn till semester/ledighet
+- Möjlighet att boka eller föreslå mötestider.
 
 ## Steg 2 – Databehov
 
