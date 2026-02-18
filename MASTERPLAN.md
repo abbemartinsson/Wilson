@@ -196,7 +196,7 @@ Resultat returneras till användaren via chatten.
 - Ta hänsyn till semester/ledighet
 - Möjlighet att boka eller föreslå mötestider.
 
-## Steg 2 – Databehov
+## Steg 2 – Databehov ✔
 
 För att systemet ska kunna analysera arbetsbelastning, göra prognoser och fungera som en intern AI-assistent krävs följande data.
 
