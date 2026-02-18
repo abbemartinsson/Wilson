@@ -6,7 +6,6 @@ Detta examensarbete syftar till att utveckla en intern AI-assistent som kan anal
 
 Systemet ska integrera data från:
 - Jira
-- Trello
 - SharePoint
 - Git (valfritt)
 
@@ -119,7 +118,7 @@ Detta räcker för examensarbete och demonstration.
 
 ---
 
-# 6. Prognoslogik (enkel modell)
+# 6. Prognoslogik
 Systemet ska:
 1. Hämta tid senaste 4 veckor  
 2. Räkna snitt per person och projekt  
@@ -132,10 +131,13 @@ Systemet ska:
 
 Exempel:
 Kapacitet: 40h  
-Snitt: 32h  
-Semester: 8h  
+Snitt rapporade timmar per vecka: 32h  
+Semester: 0h
 
-Tillgänglig: 0h  
+(overhead buffert: 2-6h) idé
+För att skapa mer realistiska prognoser kan systemet även inkludera en generell tidsbuffert för möten och interna uppgifter som inte alltid framgår av tidrapporteringen. Denna buffert dras från tillgänglig kapacitet vid beräkning av framtida arbetsbelastning.
+
+Tillgänglig: 8h
 
 Confidence kan visas som:
 - Hög  
@@ -146,21 +148,18 @@ Confidence kan visas som:
 
 # 7. Chatfunktioner (Slack eller liknande)
 Exempel på frågor:
-
-## Resurser
 - Vem är ledig nästa vecka?  
 - Hur ser belastningen ut?  
 - Kan vi starta nytt projekt?  
-
-## Projekt
 - Status på projekt X  
 - Mest tid senaste veckor  
 - Aktiva projekt  
-
-## Botten kan fråga
 - Är projekt X avslutat?  
 - Har du semester?  
-- Ska du jobba på projekt Y nästa vecka?  
+- Ska du jobba på projekt Y nästa vecka?
+
+## Funktioner (tillägg)
+- Frånvaro/sjukanmälnings chatt
 
 ---
 
@@ -169,32 +168,19 @@ Slack eller annan chattplattform skickar frågor till backend.
 Backend hanterar logik, hämtar data från databasen och externa API:er.  
 Resultat returneras till användaren via chatten.
 
-Flöde:
-
-Chat/Slack  
-→ Backend API  
-→ Databas  
-→ Integrationer (Jira, Trello, SharePoint, Git)  
-→ Svar tillbaka till chatten  
-
 ---
 
 # 9. Utmaningar
-- Integration mellan flera API:er  
-- Datakvalitet och ofullständig data  
-- Koppling mellan användare i olika system  
-- Skapa realistiska prognoser  
-- Säkerhet kring intern data  
-- Avgränsning av funktioner  
+- Integration mellan flera API:er
+- Datakvalitet och ofullständig data
+- Koppling mellan användare i olika system
+- Skapa realistiska prognoser
+- Säkerhet kring intern data
+- Avgränsning av funktioner
 
 ---
 
-# 10. Teknisk stack (förslag)
-Backend: .NET eller Node.js  
-Databas: PostgreSQL  
-Integrationer: Jira, Trello, SharePoint, Git  
-Chat: Slack bot  
-AI/NLP: valfri modell eller regelbaserat  
+# 10. Teknisk stack   
 
 ---
 
