@@ -1,6 +1,8 @@
 const axios = require('axios');
 const config = require('../config').jira;
 
+const DEFAULT_BOUNDED_ALL_ISSUES_JQL = 'updated >= "1970-01-01" ORDER BY created DESC';
+
 // Simple Jira client to wrap HTTP calls. Only the bits we need so far.
 
 class JiraClient {
@@ -46,10 +48,10 @@ class JiraClient {
 
   /**
    * Fetch Jira issues using JQL search.
-   * Default JQL only fetches issues where statusCategory = Done.
+    * Default JQL fetches all visible issues with a bounded query to satisfy Jira API constraints.
    * Returns an array of issue objects as Jira delivers them.
    */
-  async fetchAllIssues(jql = 'statusCategory = Done ORDER BY created DESC') {
+    async fetchAllIssues(jql = DEFAULT_BOUNDED_ALL_ISSUES_JQL) {
     const allIssues = [];
     let nextPageToken = null;
     const maxResults = 100;
