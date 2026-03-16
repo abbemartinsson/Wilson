@@ -255,14 +255,14 @@ async function buildExistingTempoIdSet() {
   return set;
 }
 
-async function fetchExistingValuesByColumn(table, column, values) {
+async function fetchExistingValuesByColumn(table, column, values, options = {}) {
   const uniqueValues = [...new Set((values || []).filter(v => v !== null && v !== undefined))];
   if (uniqueValues.length === 0) {
     return new Set();
   }
 
   const existing = new Set();
-  const batchSize = 500;
+  const batchSize = options.batchSize || 500;
 
   for (let i = 0; i < uniqueValues.length; i += batchSize) {
     const batch = uniqueValues.slice(i, i + batchSize);
