@@ -2,7 +2,7 @@ const jiraClient = require('../clients/jiraClient');
 const issueRepo = require('../repositories/issueRepository');
 
 async function syncIssues() {
-  // 1. fetch from Jira
+  // 1. fetch all issues from Jira (all statuses)
   const jiraIssues = await jiraClient.fetchAllIssues();
 
   // 2. transform and save to database
@@ -11,9 +11,9 @@ async function syncIssues() {
 }
 
 async function syncIssuesAllStatuses() {
-  // Fetch all issues regardless of status category.
-  // Needed when downstream data (for example worklogs) references non-Done issues.
-  const jiraIssues = await jiraClient.fetchAllIssues('ORDER BY created DESC');
+  // Fetch all visible issues regardless of status category.
+  // Uses bounded default JQL from the Jira client to satisfy API query limits.
+  const jiraIssues = await jiraClient.fetchAllIssues();
 
   const saved = await issueRepo.upsertIssues(jiraIssues);
   return saved;

@@ -16,10 +16,10 @@ async function syncAll() {
 
   console.log('  → Syncing users...');
   const usersResult = await syncUsers();
-  console.log(`    ✓ Synced ${usersResult ? usersResult.length : 0} users (with valid emails)`);
+  console.log(`    ✓ Synced ${usersResult ? usersResult.length : 0} users`);
 
   console.log('  → Syncing issues...');
-  const issuesResult = await syncIssues();
+  const issuesResult = await syncIssuesAllStatuses();
   console.log(`    ✓ Synced ${issuesResult ? issuesResult.length : 0} issues`);
 
   console.log('  → Syncing worklogs...');
@@ -42,7 +42,7 @@ async function syncDaily() {
   
   // Issues and worklogs change frequently, sync them daily
   console.log('  → Syncing issues...');
-  const issuesResult = await syncIssues();
+  const issuesResult = await syncIssuesAllStatuses();
   console.log(`    ✓ Synced ${issuesResult ? issuesResult.length : 0} issues`);
 
   console.log('  → Syncing worklogs...');
@@ -85,7 +85,7 @@ async function syncUsersOnly() {
 
   console.log('  → Syncing users...');
   const usersResult = await syncUsers();
-  console.log(`    ✓ Synced ${usersResult ? usersResult.length : 0} users (with valid emails)`);
+  console.log(`    ✓ Synced ${usersResult ? usersResult.length : 0} users`);
 
   console.log('Users-only sync completed!');
 }
