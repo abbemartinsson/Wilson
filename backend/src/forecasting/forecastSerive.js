@@ -1,6 +1,26 @@
 const { spawn } = require('child_process');
 const path = require('path');
+const fs = require('fs');
 const analyticsService = require('./analyticsService');
+
+function resolvePythonExecutable() {
+	if (process.env.PYTHON_EXECUTABLE) {
+		return process.env.PYTHON_EXECUTABLE;
+	}
+
+	const venvWindows = path.join(__dirname, '../../../.venv/Scripts/python.exe');
+	const venvPosix = path.join(__dirname, '../../../.venv/bin/python');
+
+	if (fs.existsSync(venvWindows)) {
+		return venvWindows;
+	}
+
+	if (fs.existsSync(venvPosix)) {
+		return venvPosix;
+	}
+
+	return 'python';
+}
 
 /**
  * Generate workload forecast using Python ML model.
@@ -59,9 +79,10 @@ async function generateWorkloadForecast(options = {}) {
 function runPythonForecast(inputData) {
 	return new Promise((resolve, reject) => {
 		const pythonScriptPath = path.join(__dirname, '../../python/workload_forecast.py');
+		const pythonExecutable = resolvePythonExecutable();
 		
 		// Spawn Python process
-		const pythonProcess = spawn('python', [pythonScriptPath]);
+		const pythonProcess = spawn(pythonExecutable, [pythonScriptPath]);
 		
 		let outputData = '';
 		let errorData = '';

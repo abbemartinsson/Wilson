@@ -6,7 +6,15 @@ const { App } = require('@slack/bolt');
 dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 dotenv.config();
 
+const { generateAssistantReply } = require('./services/aiAssistantService');
+
 const useSocketMode = process.env.SLACK_SOCKET_MODE !== 'false';
+const restartDelayMs = Number.parseInt(process.env.SLACK_SOCKET_RESTART_DELAY_MS, 10) || 3000;
+const replyInThread = process.env.SLACK_REPLY_IN_THREAD === 'true';
+
+let isStarting = false;
+let isRunning = false;
+let restartTimer = null;
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -25,6 +33,8 @@ app.event('message', async ({ event, client }) => {
     console.log('Incoming message event:', {
       channel_type: event.channel_type,
       channel: event.channel,
+      ts: event.ts,
+      thread_ts: event.thread_ts || null,
       subtype: event.subtype || null,
       has_bot_id: Boolean(event.bot_id),
       has_text: Boolean(event.text),
@@ -37,15 +47,35 @@ app.event('message', async ({ event, client }) => {
     if (event.bot_id || event.subtype) return;
     if (!event.text) return;
 
+    const isThreadMessage = Boolean(event.thread_ts) && event.thread_ts !== event.ts;
+    if (!replyInThread && isThreadMessage) {
+      console.log('Thread-meddelande upptackt i DM. Skickar toppniva-svar i huvudchatten.');
+    }
+
     const userMessage = event.text;
 
-    // Koppla till Ollama AI
-    const aiReply = await myBotLogic(userMessage);
+    // Bygg datakontext i backend och formulera svar via Ollama.
+    const aiReply = await generateAssistantReply(userMessage);
 
-    // Skicka svar explicit i samma DM-kanal
-    await client.chat.postMessage({
-      channel: event.channel,
-      text: `Du skrev: ${userMessage}\n\nSvar: ${aiReply}`,
+    const targetChannel = await resolveReplyChannel({ client, event, replyInThread });
+
+    // Standard: svara i huvud-DM (inte i thread) om inte uttryckligen aktiverat.
+    const messagePayload = {
+      channel: targetChannel,
+      text: aiReply,
+    };
+
+    if (replyInThread && event.thread_ts) {
+      messagePayload.thread_ts = event.thread_ts;
+    }
+
+    const posted = await client.chat.postMessage(messagePayload);
+    console.log('Posted reply:', {
+      ok: Boolean(posted?.ok),
+      channel: posted?.channel,
+      ts: posted?.ts || null,
+      thread_ts: posted?.message?.thread_ts || null,
+      mode: replyInThread ? 'thread' : 'main-dm',
     });
   } catch (error) {
     console.error('Fel:', error);
@@ -60,33 +90,109 @@ app.event('message', async ({ event, client }) => {
   }
 });
 
-// Din AI-logik här - använder Ollama
-async function myBotLogic(text) {
+async function resolveReplyChannel({ client, event, replyInThread }) {
+  if (replyInThread) {
+    return event.channel;
+  }
+
+  // For DM, open canonical DM channel to ensure reply appears in main conversation view.
+  if (event.channel_type === 'im' && event.user) {
+    try {
+      const opened = await client.conversations.open({ users: event.user });
+      if (opened?.ok && opened?.channel?.id) {
+        return opened.channel.id;
+      }
+    } catch (error) {
+      console.warn('Kunde inte resolvea canonical DM-kanal, fallback till event.channel:', error.message);
+    }
+  }
+
+  return event.channel;
+}
+
+app.error(async (error) => {
+  console.error('Slack Bolt error:', error);
+});
+
+function isSocketEofError(error) {
+  if (!error) return false;
+
+  const code = typeof error.code === 'string' ? error.code.toUpperCase() : '';
+  const syscall = typeof error.syscall === 'string' ? error.syscall.toLowerCase() : '';
+  const message = typeof error.message === 'string' ? error.message.toLowerCase() : '';
+
+  return code === 'EOF' || syscall === 'write' || message.includes('write eof');
+}
+
+async function startSlackApp() {
+  if (isStarting || isRunning) return;
+  isStarting = true;
+
   try {
-    const ollamaUrl = process.env.OLLAMA_URL || 'http://localhost:11434';
-    const ollamaModel = process.env.OLLAMA_MODEL || 'llama2';
-
-    const response = await fetch(`${ollamaUrl}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: ollamaModel,
-        prompt: text,
-        stream: false,
-      }),
-    });
-
-    if (!response.ok) {
-      throw new Error(`Ollama API error: ${response.status}`);
+    if (useSocketMode) {
+      await app.start();
+      isRunning = true;
+      console.log('Slack bot kör i Socket Mode (ingen ngrok behövs)');
+    } else {
+      await app.start(process.env.PORT || 3000);
+      isRunning = true;
+      console.log(`Slack bot kör på port ${process.env.PORT || 3000}`);
     }
 
-    const data = await response.json();
-    return data.response || 'Ingen respons från AI:n';
-  } catch (error) {
-    console.error('Ollama error:', error.message);
-    return 'Kunde inte nå AI:n. Är Ollama igång?';
+    console.log(`Ollama endpoint: ${process.env.OLLAMA_URL || 'http://localhost:11434'}`);
+  } finally {
+    isStarting = false;
   }
 }
+
+function scheduleSocketRestart(reason) {
+  if (!useSocketMode) return;
+  if (restartTimer) return;
+
+  console.warn(`Socket problem upptäckt (${reason}). Försöker återansluta om ${restartDelayMs} ms...`);
+
+  restartTimer = setTimeout(async () => {
+    restartTimer = null;
+
+    try {
+      if (isRunning) {
+        await app.stop();
+      }
+    } catch (stopError) {
+      console.error('Kunde inte stoppa Slack-app innan restart:', stopError.message);
+    } finally {
+      isRunning = false;
+    }
+
+    try {
+      await startSlackApp();
+    } catch (startError) {
+      console.error('Återanslutning misslyckades:', startError);
+      scheduleSocketRestart('retry');
+    }
+  }, restartDelayMs);
+}
+
+process.on('uncaughtException', (error) => {
+  if (isSocketEofError(error)) {
+    console.warn('Fångade socket EOF-fel, boten försöker återansluta utan att avsluta processen.');
+    scheduleSocketRestart('uncaughtException/EOF');
+    return;
+  }
+
+  console.error('Okänt okontrollerat fel:', error);
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  if (isSocketEofError(reason)) {
+    console.warn('Fångade socket EOF-rejection, boten försöker återansluta.');
+    scheduleSocketRestart('unhandledRejection/EOF');
+    return;
+  }
+
+  console.error('Unhandled rejection:', reason);
+});
 
 // Starta servern
 (async () => {
@@ -94,13 +200,5 @@ async function myBotLogic(text) {
     throw new Error('SLACK_APP_TOKEN saknas. Aktivera Socket Mode i Slack och lägg till token i .env');
   }
 
-  if (useSocketMode) {
-    await app.start();
-    console.log('Slack bot kör i Socket Mode (ingen ngrok behövs)');
-  } else {
-    await app.start(process.env.PORT || 3000);
-    console.log(`Slack bot kör på port ${process.env.PORT || 3000}`);
-  }
-
-  console.log(`Ollama endpoint: ${process.env.OLLAMA_URL || 'http://localhost:11434'}`);
+  await startSlackApp();
 })();

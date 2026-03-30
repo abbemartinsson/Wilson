@@ -19,11 +19,43 @@ JIRA_BASE_URL=din-jira-url
 JIRA_EMAIL=din-email
 JIRA_API_TOKEN=ditt-api-token
 TEMPO_API_TOKEN=ditt-tempo-token
+
+# Slack Bot
+SLACK_BOT_TOKEN=xoxb-your-token-here
+SLACK_SIGNING_SECRET=your-signing-secret-here
+SLACK_APP_TOKEN=xapp-your-app-token-here
+SLACK_SOCKET_MODE=true
+
+# Ollama (lokal AI)
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama3
+OLLAMA_TIMEOUT_MS=30000
+
+# AI-assistent kontext/svar
+AI_RESPONSE_LANGUAGE=Swedish
+AI_ANALYTICS_MONTHS=6
+AI_FORECAST_MONTHS=3
 ```
 
 ---
 
 ## Kommandon
+
+### Slack AI-bot
+
+Krav:
+- Ollama lokalt installerad och en modell nedladdad (`ollama pull llama3`)
+- Ollama igang (`ollama run llama3`)
+
+Starta Slack-boten:
+
+```bash
+npm run bot
+```
+
+Boten tar emot DM i Slack, bygger datakontext från Supabase via backend-analys och skickar prompten till Ollama för svarsgenerering.
+
+---
 
 ### Synkronisering
 
