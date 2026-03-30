@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@slack/bolt": "^4.6.0",
+    "openai": "^6.33.0"
+  }
+}

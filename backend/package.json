@@ -6,6 +6,7 @@
   "scripts": {
     "start": "node src/index.js",
     "dev": "nodemon src/index.js",
+    "bot": "node src/slack-bot.js",
     "sync:daily": "node src/scripts/sync.js daily",
     "sync:all": "node src/scripts/sync.js all",
     "sync:tables": "node src/scripts/sync.js tables",
@@ -25,9 +26,11 @@
     "test": "jest"
   },
   "dependencies": {
+    "@slack/bolt": "^3.12.0",
     "@supabase/supabase-js": "^2.0.0",
     "axios": "^1.13.6",
-    "dotenv": "^16.6.1"
+    "dotenv": "^16.6.1",
+    "openai": "^4.0.0"
   },
   "devDependencies": {
     "jest": "^29.0.0",

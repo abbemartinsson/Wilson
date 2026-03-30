@@ -27,6 +27,13 @@ def prepare_data(worklogs):
     # Convert started_at to datetime
     df['started_at'] = pd.to_datetime(df['started_at'])
     
+    # Ignore future worklogs to avoid training on planned/incorrect future dates.
+    now = pd.Timestamp.now(tz=df['started_at'].dt.tz)
+    df = df[df['started_at'] <= now]
+
+    if df.empty:
+        raise ValueError("No historical worklogs available (all records are in the future)")
+
     # Convert seconds to hours
     df['hours'] = df['time_spent_seconds'] / 3600.0
     
@@ -67,26 +74,53 @@ def train_and_forecast(df, periods_months=3):
     # Fit model
     model.fit(df[['ds', 'y']])
     
-    # Calculate number of weeks to forecast
-    weeks_to_forecast = periods_months * 4
+    now = datetime.now()
+    next_month_start = datetime(now.year, now.month, 1) + pd.DateOffset(months=1)
+    next_month_start = pd.Timestamp(next_month_start).to_pydatetime()
+    horizon_end = (pd.Timestamp(next_month_start) + pd.DateOffset(months=periods_months) - pd.Timedelta(days=1)).to_pydatetime()
+
+    # Forecast enough weekly points to cover the full month horizon.
+    last_training_date = pd.to_datetime(df['ds']).max().to_pydatetime()
+    days_to_cover = (horizon_end - last_training_date).days
+    weeks_to_forecast = max(1, int(np.ceil(days_to_cover / 7.0)) + 2)
     
     # Create future dataframe
-    future = model.make_future_dataframe(periods=weeks_to_forecast, freq='W')
+    future = model.make_future_dataframe(periods=weeks_to_forecast, freq='W-MON')
     
     # Generate forecast
     forecast = model.predict(future)
     
     # Extract relevant columns
-    forecast_result = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(weeks_to_forecast)
-    
-    # Calculate monthly aggregates from weekly forecasts
-    forecast_result['month'] = pd.to_datetime(forecast_result['ds']).dt.to_period('M')
-    monthly_forecast = forecast_result.groupby('month').agg({
-        'yhat': 'sum',
-        'yhat_lower': 'sum',
-        'yhat_upper': 'sum'
-    }).reset_index()
-    
+    full_weekly = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(weeks_to_forecast).copy()
+
+    # Keep only points from the forecast period and expand weekly values over days
+    # so monthly totals align with calendar month boundaries.
+    forecast_result = full_weekly[full_weekly['ds'] > pd.to_datetime(last_training_date)].copy()
+
+    daily_rows = []
+    for _, row in forecast_result.iterrows():
+        week_start = pd.to_datetime(row['ds'])
+        for offset in range(7):
+            day = week_start + pd.Timedelta(days=offset)
+            if pd.Timestamp(next_month_start) <= day <= pd.Timestamp(horizon_end):
+                daily_rows.append({
+                    'date': day,
+                    'yhat': row['yhat'] / 7.0,
+                    'yhat_lower': row['yhat_lower'] / 7.0,
+                    'yhat_upper': row['yhat_upper'] / 7.0
+                })
+
+    if daily_rows:
+        daily_df = pd.DataFrame(daily_rows)
+        daily_df['month'] = daily_df['date'].dt.to_period('M')
+        monthly_forecast = daily_df.groupby('month').agg({
+            'yhat': 'sum',
+            'yhat_lower': 'sum',
+            'yhat_upper': 'sum'
+        }).reset_index()
+    else:
+        monthly_forecast = pd.DataFrame(columns=['month', 'yhat', 'yhat_lower', 'yhat_upper'])
+
     monthly_forecast['month'] = monthly_forecast['month'].astype(str)
     monthly_forecast.columns = ['month', 'predicted_hours', 'lower_bound', 'upper_bound']
     

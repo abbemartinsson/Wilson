@@ -8,3 +8,17 @@ JIRA_API_TOKEN=
 
 TEMPO_BASE_URL=https://api.tempo.io
 TEMPO_API_TOKEN=
+
+# Slack Bot
+SLACK_BOT_TOKEN=xoxb-your-token-here
+SLACK_SIGNING_SECRET=your-signing-secret-here
+SLACK_APP_TOKEN=xapp-your-app-token-here
+SLACK_SOCKET_MODE=true
+
+# Ollama (lokal AI - http://localhost:11434)
+# Installera från: https://ollama.ai
+OLLAMA_URL=http://localhost:11434
+OLLAMA_MODEL=llama2
+
+# Server Port
+PORT=3000
