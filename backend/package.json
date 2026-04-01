@@ -5,6 +5,7 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
+    "api": "node src/index.js",
     "dev": "nodemon src/index.js",
     "bot": "node src/slack-bot.js",
     "sync:daily": "node src/scripts/sync.js daily",
@@ -30,7 +31,7 @@
     "@supabase/supabase-js": "^2.0.0",
     "axios": "^1.13.6",
     "dotenv": "^16.6.1",
-    "openai": "^4.0.0"
+    "express": "^4.22.1"
   },
   "devDependencies": {
     "jest": "^29.0.0",
