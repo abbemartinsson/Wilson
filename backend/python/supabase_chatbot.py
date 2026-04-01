@@ -211,12 +211,14 @@ def _extract_json_block(text):
     if not text:
         return None
 
-    first_bracket = text.find("{")
+    first_object = text.find("{")
+    first_array = text.find("[")
 
-    if first_bracket == -1:
+    starts = [idx for idx in (first_object, first_array) if idx != -1]
+    if not starts:
         return None
 
-    start = first_bracket
+    start = min(starts)
 
     candidate = text[start:]
     try:
@@ -238,11 +240,11 @@ def _format_project_info(data):
     last_logged_issue = data.get("lastLoggedIssue") or "Ingen"
 
     return (
-        f"Projekt: {project_name} ({project_key})\n"
-        f"Startdatum: {start_date}\n"
-        f"Senast loggad issue: {last_logged_issue}\n"
-        f"Antal contributors: {contributors}\n"
-        f"Totalt loggade timmar: {total_hours if total_hours is not None else '-'}"
+        f"Projekt: {project_name} ({project_key})\n\n"
+        f"🕐 {total_hours if total_hours is not None else '-'} timmar\n\n"
+        f"🧍 {contributors} arbetare\n\n"
+        f"📅 Startdatum: {start_date}\n\n"
+        f"🧩 Senaste loggad issue: {last_logged_issue}"
     )
 
 
@@ -512,7 +514,10 @@ def _run_intent_command(user_text, messages=None):
             project_key = key_match.group(0)
             output = _run_npm_command("report:get-project-info", [project_key])
             formatted = _format_command_output("report:get-project-info", output)
-            return _format_with_model("report:get-project-info", formatted, user_text, messages)
+            return (
+                f"{formatted}\n\n"
+                "Vill du se tidsplan och prognos för projektet?"
+            )
 
         query = _guess_project_query(user_text)
         if not query:
@@ -527,7 +532,10 @@ def _run_intent_command(user_text, messages=None):
             if project_key:
                 project_output = _run_npm_command("report:get-project-info", [project_key])
                 formatted = _format_command_output("report:get-project-info", project_output)
-                return _format_with_model("report:get-project-info", formatted, user_text, messages)
+                return (
+                    f"{formatted}\n\n"
+                    "Vill du se tidsplan och prognos för projektet?"
+                )
 
         formatted = _format_command_output("report:search-projects", search_output)
         return _format_with_model("report:search-projects", formatted, user_text, messages)
