@@ -25,16 +25,16 @@ SLACK_BOT_TOKEN=xoxb-your-token-here
 SLACK_SIGNING_SECRET=your-signing-secret-here
 SLACK_APP_TOKEN=xapp-your-app-token-here
 SLACK_SOCKET_MODE=true
+SLACK_REPLY_IN_THREAD=false
+SLACK_ROUTER_MAX_MESSAGES=20
 
-# Ollama (lokal AI)
-OLLAMA_URL=http://localhost:11434
-OLLAMA_MODEL=llama3
-OLLAMA_TIMEOUT_MS=30000
+# Python chatbot-router -> Node Reporting API
+NODE_REPORTING_API_URL=http://localhost:3000
+ROUTER_HTTP_TIMEOUT_SECONDS=30
+FORECAST_HISTORY_MONTHS=24
 
-# AI-assistent kontext/svar
-AI_RESPONSE_LANGUAGE=Swedish
-AI_ANALYTICS_MONTHS=6
-AI_FORECAST_MONTHS=3
+# Gemini
+GOOGLE_API_KEY=din-google-api-key
 ```
 
 ---
@@ -44,16 +44,17 @@ AI_FORECAST_MONTHS=3
 ### Slack AI-bot
 
 Krav:
-- Ollama lokalt installerad och en modell nedladdad (`ollama pull llama3`)
-- Ollama igang (`ollama run llama3`)
+- Python 3 med beroenden installerade i `backend/python/requirements.txt`
+- Node Reporting API startad (`npm run api`)
 
-Starta Slack-boten:
+Starta API och bot:
 
 ```bash
+npm run api
 npm run bot
 ```
 
-Boten tar emot DM i Slack, bygger datakontext från Supabase via backend-analys och skickar prompten till Ollama för svarsgenerering.
+Boten tar emot DM i Slack, skickar meddelandet till Python chatbot-router, som anropar Node Reporting API samt Python forecast-pipeline och returnerar svaret till Slack.
 
 ---
 

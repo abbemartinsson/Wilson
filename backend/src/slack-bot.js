@@ -6,7 +6,7 @@ const { App } = require('@slack/bolt');
 dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 dotenv.config();
 
-const { generateAssistantReply } = require('./services/aiAssistantService');
+const { askPythonRouter } = require('./services/pythonRouterService');
 
 const useSocketMode = process.env.SLACK_SOCKET_MODE !== 'false';
 const restartDelayMs = Number.parseInt(process.env.SLACK_SOCKET_RESTART_DELAY_MS, 10) || 3000;
@@ -15,6 +15,8 @@ const replyInThread = process.env.SLACK_REPLY_IN_THREAD === 'true';
 let isStarting = false;
 let isRunning = false;
 let restartTimer = null;
+const conversationStore = new Map();
+const maxConversationMessages = Number.parseInt(process.env.SLACK_ROUTER_MAX_MESSAGES, 10) || 20;
 
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
@@ -48,16 +50,20 @@ app.event('message', async ({ event, client }) => {
     if (!event.text) return;
 
     const isThreadMessage = Boolean(event.thread_ts) && event.thread_ts !== event.ts;
-    if (!replyInThread && isThreadMessage) {
-      console.log('Thread-meddelande upptackt i DM. Skickar toppniva-svar i huvudchatten.');
-    }
 
     const userMessage = event.text;
+    const conversationKey = `${event.user}:${event.channel}`;
+    const existingMessages = conversationStore.get(conversationKey) || [];
+    const updatedMessages = [...existingMessages, { role: 'user', content: userMessage }];
 
-    // Bygg datakontext i backend och formulera svar via Ollama.
-    const aiReply = await generateAssistantReply(userMessage);
+    const trimmedMessages = updatedMessages.slice(-maxConversationMessages);
+    const aiReply = await askPythonRouter(trimmedMessages);
+    const nextMessages = [...trimmedMessages, { role: 'assistant', content: aiReply }].slice(
+      -maxConversationMessages
+    );
+    conversationStore.set(conversationKey, nextMessages);
 
-    const targetChannel = await resolveReplyChannel({ client, event, replyInThread });
+    const targetChannel = event.channel;
 
     // Standard: svara i huvud-DM (inte i thread) om inte uttryckligen aktiverat.
     const messagePayload = {
@@ -65,8 +71,11 @@ app.event('message', async ({ event, client }) => {
       text: aiReply,
     };
 
-    if (replyInThread && event.thread_ts) {
+    // Mirror thread context from incoming message to keep replies in the same Slack view.
+    if (event.thread_ts) {
       messagePayload.thread_ts = event.thread_ts;
+    } else if (replyInThread && event.ts) {
+      messagePayload.thread_ts = event.ts;
     }
 
     const posted = await client.chat.postMessage(messagePayload);
@@ -75,7 +84,7 @@ app.event('message', async ({ event, client }) => {
       channel: posted?.channel,
       ts: posted?.ts || null,
       thread_ts: posted?.message?.thread_ts || null,
-      mode: replyInThread ? 'thread' : 'main-dm',
+      mode: isThreadMessage ? 'mirrored-thread' : (replyInThread ? 'forced-thread' : 'main-dm'),
     });
   } catch (error) {
     console.error('Fel:', error);
@@ -89,26 +98,6 @@ app.event('message', async ({ event, client }) => {
     }
   }
 });
-
-async function resolveReplyChannel({ client, event, replyInThread }) {
-  if (replyInThread) {
-    return event.channel;
-  }
-
-  // For DM, open canonical DM channel to ensure reply appears in main conversation view.
-  if (event.channel_type === 'im' && event.user) {
-    try {
-      const opened = await client.conversations.open({ users: event.user });
-      if (opened?.ok && opened?.channel?.id) {
-        return opened.channel.id;
-      }
-    } catch (error) {
-      console.warn('Kunde inte resolvea canonical DM-kanal, fallback till event.channel:', error.message);
-    }
-  }
-
-  return event.channel;
-}
 
 app.error(async (error) => {
   console.error('Slack Bolt error:', error);
@@ -139,7 +128,7 @@ async function startSlackApp() {
       console.log(`Slack bot kör på port ${process.env.PORT || 3000}`);
     }
 
-    console.log(`Ollama endpoint: ${process.env.OLLAMA_URL || 'http://localhost:11434'}`);
+    console.log('Python chatbot-router is enabled for Slack replies.');
   } finally {
     isStarting = false;
   }
