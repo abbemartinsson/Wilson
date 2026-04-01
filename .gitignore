@@ -2,4 +2,6 @@ node_modules/
 backend/src/config/.env
 /data/
 /ML/data/
-
+backend/python/__pycache__
+__pycache__/
+*.pyc
