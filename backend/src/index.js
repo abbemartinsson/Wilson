@@ -31,6 +31,24 @@ app.get('/api/reporting/project-info', async (req, res) => {
   }
 });
 
+app.get('/api/reporting/project-last-week-hours', async (req, res) => {
+  try {
+    const projectKey = String(req.query.projectKey || '').trim();
+    if (!projectKey) {
+      return res.status(400).json({ error: 'projectKey is required' });
+    }
+
+    const report = await reportingService.getProjectLastWeekHours(projectKey);
+    if (!report) {
+      return res.status(404).json({ error: `No project found for key: ${projectKey}` });
+    }
+
+    return res.json(report);
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 app.get('/api/reporting/search-projects', async (req, res) => {
   try {
     const query = String(req.query.query || '').trim();

@@ -37,6 +37,159 @@ async function searchProjects(query) {
   }));
 }
 
+async function getProjectLastWeekHours(projectKey) {
+	const normalizedProjectKey = String(projectKey || '').trim().toUpperCase();
+
+	if (!normalizedProjectKey) {
+		throw new Error('projectKey is required');
+	}
+
+	const project = await analyticsRepository.getProjectInfo(normalizedProjectKey);
+	if (!project) {
+		return null;
+	}
+
+	const weekRange = getPreviousWeekRangeInStockholm();
+	const worklogs = await analyticsRepository.getAllWorklogsForForecast({
+		projectKey: normalizedProjectKey,
+		startDate: weekRange.startDateUtc,
+		endDate: weekRange.endDateUtc,
+	});
+
+	const totalSeconds = worklogs.reduce((sum, worklog) => sum + (worklog.time_spent_seconds || 0), 0);
+	const duration = secondsToHoursAndMinutes(totalSeconds);
+
+	return {
+		projectId: project.projectId,
+		projectKey: project.projectKey,
+		projectName: project.projectName,
+		period: {
+			timeZone: 'Europe/Stockholm',
+			startDate: weekRange.startDate,
+			endDate: weekRange.endDate,
+			label: `${weekRange.startDate} till ${weekRange.endDate}`,
+		},
+		totalSeconds,
+		totalHours: roundToTwoDecimals(totalSeconds / 3600),
+		hours: duration.hours,
+		minutes: duration.minutes,
+		formattedDuration: `${duration.hours} timmar ${duration.minutes} minuter`,
+	};
+}
+
+function getPreviousWeekRangeInStockholm(referenceDate = new Date()) {
+	const stockholmToday = getDatePartsInTimeZone(referenceDate, 'Europe/Stockholm');
+	const stockholmTodayDate = new Date(Date.UTC(stockholmToday.year, stockholmToday.month - 1, stockholmToday.day));
+
+	const dayOfWeek = stockholmTodayDate.getUTCDay();
+	const daysSinceMonday = (dayOfWeek + 6) % 7;
+
+	const mondayThisWeek = addUtcDays(stockholmTodayDate, -daysSinceMonday);
+	const mondayLastWeek = addUtcDays(mondayThisWeek, -7);
+	const sundayLastWeek = addUtcDays(mondayLastWeek, 6);
+
+	const mondayParts = {
+		year: mondayLastWeek.getUTCFullYear(),
+		month: mondayLastWeek.getUTCMonth() + 1,
+		day: mondayLastWeek.getUTCDate(),
+	};
+	const sundayParts = {
+		year: sundayLastWeek.getUTCFullYear(),
+		month: sundayLastWeek.getUTCMonth() + 1,
+		day: sundayLastWeek.getUTCDate(),
+	};
+
+	return {
+		startDate: formatDateParts(mondayParts),
+		endDate: formatDateParts(sundayParts),
+		startDateUtc: zonedTimeToUtc(mondayParts, 0, 0, 0, 'Europe/Stockholm'),
+		endDateUtc: zonedTimeToUtc(sundayParts, 23, 59, 59, 'Europe/Stockholm'),
+	};
+}
+
+function secondsToHoursAndMinutes(totalSeconds) {
+	const safeSeconds = Math.max(0, Math.floor(totalSeconds || 0));
+	return {
+		hours: Math.floor(safeSeconds / 3600),
+		minutes: Math.floor((safeSeconds % 3600) / 60),
+	};
+}
+
+function addUtcDays(date, days) {
+	const result = new Date(date.getTime());
+	result.setUTCDate(result.getUTCDate() + days);
+	return result;
+}
+
+function formatDateParts(parts) {
+	const month = String(parts.month).padStart(2, '0');
+	const day = String(parts.day).padStart(2, '0');
+	return `${parts.year}-${month}-${day}`;
+}
+
+function getDatePartsInTimeZone(date, timeZone) {
+	const formatter = new Intl.DateTimeFormat('en-CA', {
+		timeZone,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+	});
+
+	const parts = formatter.formatToParts(date);
+	const mapped = {};
+	for (const part of parts) {
+		if (part.type === 'year' || part.type === 'month' || part.type === 'day') {
+			mapped[part.type] = Number.parseInt(part.value, 10);
+		}
+	}
+
+	return {
+		year: mapped.year,
+		month: mapped.month,
+		day: mapped.day,
+	};
+}
+
+function getTimeZoneOffset(date, timeZone) {
+	const formatter = new Intl.DateTimeFormat('en-US', {
+		timeZone,
+		hour12: false,
+		year: 'numeric',
+		month: '2-digit',
+		day: '2-digit',
+		hour: '2-digit',
+		minute: '2-digit',
+		second: '2-digit',
+	});
+
+	const parts = formatter.formatToParts(date);
+	const values = {};
+	for (const part of parts) {
+		if (part.type !== 'literal') {
+			values[part.type] = part.value;
+		}
+	}
+
+	const asUtc = Date.UTC(
+		Number.parseInt(values.year, 10),
+		Number.parseInt(values.month, 10) - 1,
+		Number.parseInt(values.day, 10),
+		Number.parseInt(values.hour, 10),
+		Number.parseInt(values.minute, 10),
+		Number.parseInt(values.second, 10),
+	);
+
+	return asUtc - date.getTime();
+}
+
+function zonedTimeToUtc(dateParts, hour, minute, second, timeZone) {
+	const utcGuess = new Date(
+		Date.UTC(dateParts.year, dateParts.month - 1, dateParts.day, hour, minute, second)
+	);
+	const offset = getTimeZoneOffset(utcGuess, timeZone);
+	return new Date(utcGuess.getTime() - offset);
+}
+
 /**
  * Get workload forecast with historical comparison.
  * 
@@ -161,6 +314,7 @@ async function getWorkloadForecastSummary(forecastMonths = 3) {
 module.exports = {
 	getProjectInfo,
 	searchProjects,
+	getProjectLastWeekHours,
 	getWorkloadForecast,
 	getHistoricalWorkloadComparison,
 	getWorkloadAnalytics,

@@ -44,6 +44,25 @@ async function main() {
       process.exit(0);
     }
 
+    if (command === 'project-last-week-hours') {
+      const projectKey = process.argv[3];
+
+      if (!projectKey) {
+        console.error('Missing project key. Usage: npm run report:project-last-week-hours <PROJECT_KEY>');
+        process.exit(1);
+      }
+
+      const report = await reportingService.getProjectLastWeekHours(projectKey);
+
+      if (!report) {
+        console.error(`No project found for key: ${projectKey}`);
+        process.exit(1);
+      }
+
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(0);
+    }
+
     if (command === 'workload-forecast') {
       const months = parseInt(process.argv[3]) || 3;
 
@@ -119,6 +138,7 @@ async function main() {
     console.error('Unknown command.');
     console.error('\nSupported commands:');
     console.error('  get-project-info <PROJECT_KEY>');
+    console.error('  project-last-week-hours <PROJECT_KEY>');
     console.error('  search-projects <QUERY>');
     console.error('  workload-forecast [MONTHS]');
     console.error('  workload-forecast-summary [MONTHS]');
