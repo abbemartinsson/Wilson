@@ -25,6 +25,11 @@ function askPythonRouter(messages) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, '../../python/supabase_chatbot.py');
     const pythonExecutable = resolvePythonExecutable();
+    const subprocessEnv = {
+      ...process.env,
+      PYTHONUTF8: '1',
+      PYTHONIOENCODING: 'utf-8',
+    };
 
     console.log('Python router invocation:', {
       pythonExecutable,
@@ -32,17 +37,19 @@ function askPythonRouter(messages) {
       messageCount: Array.isArray(messages) ? messages.length : 0,
     });
 
-    const processHandle = spawn(pythonExecutable, [scriptPath, '--chat-json']);
+    const processHandle = spawn(pythonExecutable, [scriptPath, '--chat-json'], {
+      env: subprocessEnv,
+    });
 
     let stdout = '';
     let stderr = '';
 
     processHandle.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
+      stdout += chunk.toString('utf8');
     });
 
     processHandle.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
+      stderr += chunk.toString('utf8');
     });
 
     processHandle.on('error', (error) => {
