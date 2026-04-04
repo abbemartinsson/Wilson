@@ -23,6 +23,12 @@ try:
 except Exception:  # pragma: no cover
     genai = None
 
+# Ensure UTF-8 for stdin/stdout/stderr even on Windows default codepages.
+for _stream_name in ("stdout", "stderr", "stdin"):
+    _stream = getattr(sys, _stream_name, None)
+    if hasattr(_stream, "reconfigure"):
+        _stream.reconfigure(encoding="utf-8")
+
 
 env_path = Path(__file__).resolve().parents[1] / "src" / "config" / ".env"
 if load_dotenv is not None:
@@ -41,23 +47,23 @@ if GOOGLE_API_KEY and genai is not None:
 
 COMMAND_SCHEMA = {
     "report:get-project-info": {
-        "description": "Hamta detaljerad information om ett specifikt projekt",
+        "description": "Hämta detaljerad information om ett specifikt projekt",
         "input": "projectKey (t.ex. HULTP)",
     },
     "report:search-projects": {
-        "description": "Sok efter projekt baserat pa namn eller nyckel",
-        "input": "sokterm (t.ex. hulta)",
+        "description": "Sök efter projekt baserat på namn eller nyckel",
+        "input": "sökterm (t.ex. hulta)",
     },
     "forecast:python-ml": {
-        "description": "Kora Python ML-forecast baserat pa historiska worklogs",
+        "description": "Köra Python ML-forecast baserat på historiska worklogs",
         "input": "antal manader (1-12)",
     },
     "report:analytics": {
-        "description": "Analysera arbetsbelastning och aktivitet over tiden",
+        "description": "Analysera arbetsbelastning och aktivitet över tiden",
         "input": "antal manader bakat (t.ex. 6)",
     },
     "report:historical": {
-        "description": "Visa historisk jamforelse av arbetsbelastning over ar",
+        "description": "Visa historisk jämförelse av arbetsbelastning över år",
         "input": "month/year/yearsBack (valfritt)",
     },
 }
@@ -72,7 +78,7 @@ def _build_conversation_context(messages):
         role = msg.get("role", "")
         content = msg.get("content", "")
         if role == "user":
-            context_lines.append(f"Anvandare fragade: {content[:100]}")
+            context_lines.append(f"Användare frågade: {content[:100]}")
         elif role == "assistant":
             summary = content[:150]
             if len(content) > 150:
@@ -87,20 +93,20 @@ def _suggest_next_command(command_name, user_intent):
 
     suggestions = {
         "report:get-project-info": [
-            ("timeline", "forecast:python-ml", "Vill du se tidsplan och prognos for projektet?"),
+            ("timeline", "forecast:python-ml", "Vill du se tidsplan och prognos för projektet?"),
             ("team", "report:analytics", "Vill du se hur teamet fordelat sitt arbete?"),
-            ("history", "report:historical", "Vill du se hur arbetsbelastningen utvecklats over aret?"),
+            ("history", "report:historical", "Vill du se hur arbetsbelastningen utvecklats över året?"),
         ],
         "report:search-projects": [
-            ("andra", "report:search-projects", "Vill du soka efter fler projekt?"),
+            ("andra", "report:search-projects", "Vill du söka efter fler projekt?"),
             ("analys", "report:analytics", "Vill du analysera arbetsbelastningen?"),
         ],
         "report:analytics": [
             ("prognos", "forecast:python-ml", "Vill du se framtida prognos?"),
-            ("historik", "report:historical", "Vill du jamfora med tidigare ar?"),
+            ("historik", "report:historical", "Vill du jämföra med tidigare år?"),
         ],
         "forecast:python-ml": [
-            ("historik", "report:historical", "Vill du jamfora prognosen mot tidigare ar?"),
+            ("historik", "report:historical", "Vill du jämföra prognosen mot tidigare år?"),
             ("team", "report:analytics", "Vill du se mer detaljerad teamanalys?"),
         ],
     }
@@ -119,17 +125,17 @@ def _format_with_model(command_name, formatted_data, user_intent, messages=None)
     conversation_context = _build_conversation_context(messages) if messages else ""
 
     if genai_client is None:
-        return f"{formatted_data}\n\nNasta steg: {suggestion or 'Vill du utforska mer data?'}"
+        return f"{formatted_data}\n\nNästa steg: {suggestion or 'Vill du utforska mer data?'}"
 
     context_section = ""
     if conversation_context:
         context_section = (
-            "KONVERSATIONSKONTEXT (for att forsta sammanhanget):\n"
+            "KONVERSATIONSKONTEXT (för att förstå sammanhanget):\n"
             f"{conversation_context}\n\n"
         )
 
     prompt = f"""
-Du har fatt foljande data fran systemet:
+Du har fått följande data från systemet:
 
 {context_section}KOMMANDO KORDES: {command_name}
 
@@ -139,12 +145,12 @@ RA DATA (redan formaterad):
 ANVANDARENS NYA FRAGA: {user_intent}
 
 INSTRUKTION:
-1. Presentera data pa svenska pa ett naturligt satt (2-4 meningar)
-2. Gor det affarscentrerat, inte tekniskt
-3. Lagg till detta forslag pa nasta steg:
-   "{suggestion if suggestion else "Vill du utforska mer data eller kontrollera nagot annat?"}"
+1. Presentera data på svenska på ett naturligt sätt (2-4 meningar)
+2. Gör det affärscentrerat, inte tekniskt
+3. Lägg till detta förslag på nästa steg:
+   "{suggestion if suggestion else "Vill du utforska mer data eller kontrollera något annat?"}"
 
-Svara bara med den presenterade texten + nasta-steg-forslaget. Inget annat."""
+Svara bara med den presenterade texten + nästa-steg-förslaget. Inget annat."""
 
     try:
         response = genai_client.models.generate_content(
@@ -211,7 +217,7 @@ def _run_python_forecast(worklogs, forecast_months=3, include_historical=True):
 
     result = json.loads(stdout)
     if not result.get("success"):
-        raise RuntimeError(result.get("error", "Forecast-processen returnerade ett okant fel."))
+        raise RuntimeError(result.get("error", "Forecast-processen returnerade ett okänt fel."))
 
     return result
 
@@ -242,7 +248,7 @@ def _fetch_worklogs_for_forecast(project_key=None, months_back=FORECAST_HISTORY_
     )
     worklogs = payload.get("worklogs") or []
     if not worklogs:
-        raise RuntimeError("Ingen worklog-data tillganglig for forecast.")
+        raise RuntimeError("Ingen worklog-data tillgänglig för forecast.")
     return worklogs
 
 
@@ -255,11 +261,11 @@ def _format_project_info(data):
     if not isinstance(data, dict):
         return "Jag kunde inte tolka projektdatan."
 
-    project_name = data.get("projectName") or "Okant projekt"
+    project_name = data.get("projectName") or "Okänt projekt"
     project_key = data.get("projectKey") or "-"
     contributors = data.get("contributorsCount", "-")
     total_hours = data.get("totalHours") or data.get("totalSeconds", "-")
-    start_date = data.get("startDate") or "Okant"
+    start_date = data.get("startDate") or "Okänt"
     last_logged_issue = data.get("lastLoggedIssue") or "Ingen"
 
     return (
@@ -275,11 +281,11 @@ def _format_project_search(data):
     if not isinstance(data, list):
         return "Jag kunde inte tolka projektsokningen."
     if not data:
-        return "Jag hittade inga projekt som matchar din sokning."
+        return "Jag hittade inga projekt som matchar din sökning."
 
-    lines = ["Jag hittade foljande projekt:"]
+    lines = ["Jag hittade följande projekt:"]
     for project in data[:10]:
-        name = project.get("projectName") or "Okant projektnamn"
+        name = project.get("projectName") or "Okänt projektnamn"
         key = project.get("projectKey") or "-"
         lines.append(f"- {name} ({key})")
     return "\n".join(lines)
@@ -299,9 +305,9 @@ def _format_forecast_summary(data):
         monthly = data.get("monthly_predictions") or []
 
     if monthly:
-        lines = ["Prognos framat:"]
+        lines = ["Prognos framåt:"]
         for item in monthly[:6]:
-            month = item.get("month") or item.get("period") or "Okand period"
+            month = item.get("month") or item.get("period") or "Okänd period"
             hours = item.get("predicted_hours")
             if hours is None:
                 hours = item.get("hours")
@@ -328,11 +334,11 @@ def _format_historical(data):
     current = data.get("current_period", {})
     summary = data.get("summary", {})
     lines = [
-        "Historisk jamforelse:",
+        "Historisk jämförelse:",
         (
             f"- Nuvarande period: {current.get('year', '-')}"
             f"-{str(current.get('month', '-')).zfill(2)}"
-            f", timmar: {current.get('total_hours', '-')}, anvandare: {current.get('active_users', '-')}"
+            f", timmar: {current.get('total_hours', '-')}, användare: {current.get('active_users', '-')}"
         ),
         f"- Trend: {summary.get('trend', '-')}",
         f"- Snitt timmar over ar: {summary.get('average_hours_across_years', '-')}",
@@ -360,7 +366,7 @@ def _format_analytics(data):
 
 def _guess_project_query(user_text):
     match = re.search(
-        r"(?:projekt(?:et)?|project)\s*(?:om|for|for|kring)?\s+([a-zA-Z0-9_-]+)",
+        r"(?:projekt(?:et)?|project)\s*(?:om|för|kring)?\s+([a-zA-Z0-9_-]+)",
         user_text,
         flags=re.IGNORECASE,
     )
@@ -369,8 +375,8 @@ def _guess_project_query(user_text):
 
     for pattern in [
         r"(?:info|information|detaljer|fakta)\s+(?:om\s+)?([a-zA-Z0-9_-]+)",
-        r"(?:visa|beratta|beratta)\s+(?:mig\s+)?(?:info|information|detaljer|fakta|status)?\s*(?:om|for|for)?\s+([a-zA-Z0-9_-]+)",
-        r"(?:hur\s+gar|hur\s+gar|status)\s*(?:for|for|om)?\s+([a-zA-Z0-9_-]+)",
+        r"(?:visa|berätta)\s+(?:mig\s+)?(?:info|information|detaljer|fakta|status)?\s*(?:om|för)?\s+([a-zA-Z0-9_-]+)",
+        r"(?:hur\s+går|status)\s*(?:för|om)?\s+([a-zA-Z0-9_-]+)",
     ]:
         free_match = re.search(pattern, user_text, flags=re.IGNORECASE)
         if free_match:
@@ -386,14 +392,14 @@ def _guess_project_query(user_text):
         "detaljer",
         "fakta",
         "visa",
-        "beratta",
+        "berätta",
         "om",
-        "for",
+        "för",
         "projekt",
         "projektet",
         "project",
         "hur",
-        "gar",
+        "går",
         "status",
     }
     meaningful = [token for token in tokens if token.lower() not in stopwords]
@@ -409,7 +415,7 @@ def _is_project_info_request(user_text):
     if "projekt" in lowered or "project" in lowered:
         return True
 
-    info_words = ("info", "information", "detalj", "fakta", "status", "visa", "beratta")
+    info_words = ("info", "information", "detalj", "fakta", "status", "visa", "berätta")
     if any(word in lowered for word in info_words):
         return True
 
@@ -505,7 +511,7 @@ def _run_intent_command(user_text, messages=None):
             project_key = key_match.group(0)
             data = _http_get_json("/api/reporting/project-info", {"projectKey": project_key})
             formatted = _format_project_info(data)
-            return f"{formatted}\n\nVill du se tidsplan och prognos for projektet?"
+            return f"{formatted}\n\nVill du se tidsplan och prognos för projektet?"
 
         query = _guess_project_query(user_text)
         if not query:
@@ -519,7 +525,7 @@ def _run_intent_command(user_text, messages=None):
             if project_key:
                 project_data = _http_get_json("/api/reporting/project-info", {"projectKey": project_key})
                 formatted = _format_project_info(project_data)
-                return f"{formatted}\n\nVill du se tidsplan och prognos for projektet?"
+                return f"{formatted}\n\nVill du se tidsplan och prognos för projektet?"
 
         formatted = _format_project_search(projects)
         return _format_with_model("report:search-projects", formatted, user_text, messages)
