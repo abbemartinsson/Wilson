@@ -115,8 +115,8 @@ def train_and_forecast_months(weekly_df, periods_months=3):
     Train a RandomForest model on monthly workload and forecast future months.
     """
     monthly_df = aggregate_monthly(weekly_df)
-    if len(monthly_df) < 8:
-        raise ValueError(f"Insufficient monthly data for forecasting. Need at least 8 months, got {len(monthly_df)}")
+    if len(monthly_df) < 4:
+        raise ValueError(f"Insufficient monthly data for forecasting. Need at least 4 months, got {len(monthly_df)}")
 
     monthly_values = monthly_df["y"].astype(float).tolist()
     x_train, y_train, feature_cols = build_training_matrix(monthly_values)

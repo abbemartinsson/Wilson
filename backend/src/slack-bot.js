@@ -7,10 +7,12 @@ dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 dotenv.config();
 
 const { askPythonRouter } = require('./services/pythonRouterService');
+const { handleTextCommand } = require('./slackCommands');
 
 const useSocketMode = process.env.SLACK_SOCKET_MODE !== 'false';
 const restartDelayMs = Number.parseInt(process.env.SLACK_SOCKET_RESTART_DELAY_MS, 10) || 3000;
 const replyInThread = process.env.SLACK_REPLY_IN_THREAD === 'true';
+const enableDmRouter = process.env.SLACK_ENABLE_DM_ROUTER === 'true';
 
 let isStarting = false;
 let isRunning = false;
@@ -28,6 +30,21 @@ const app = new App({
 // Lyssna på message och filtrera till DM
 app.event('message', async ({ event, client }) => {
   try {
+    if (!event.text) return;
+    if (event.bot_id || event.subtype) return;
+
+    const handledCommand = await handleTextCommand({
+      text: event.text,
+      channel: event.channel,
+      client,
+      logger: console,
+      threadTs: event.thread_ts,
+    });
+
+    if (handledCommand) return;
+
+    if (!enableDmRouter) return;
+
     const isDmChannel =
       event.channel_type === 'im' ||
       (typeof event.channel === 'string' && event.channel.startsWith('D'));
@@ -46,9 +63,6 @@ app.event('message', async ({ event, client }) => {
 
     // Bara DM, endast användarmeddelanden, ingen system/subtype-trafik.
     if (!isDmChannel) return;
-    if (event.bot_id || event.subtype) return;
-    if (!event.text) return;
-
     const isThreadMessage = Boolean(event.thread_ts) && event.thread_ts !== event.ts;
 
     const userMessage = event.text;

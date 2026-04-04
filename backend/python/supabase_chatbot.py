@@ -10,6 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 from urllib import error, parse, request
 
+# Ensure UTF-8 encoding for stdout globally (fixes Swedish characters å,ä,ö on Windows)
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8')
+if hasattr(sys.stderr, 'reconfigure'):
+    sys.stderr.reconfigure(encoding='utf-8')
+
 try:
     from dateutil.relativedelta import relativedelta
 except Exception:  # pragma: no cover
@@ -251,8 +257,24 @@ def _fetch_worklogs_for_forecast(project_key=None, months_back=FORECAST_HISTORY_
 
 
 def _run_forecast_pipeline(months, project_key=None):
-    worklogs = _fetch_worklogs_for_forecast(project_key=project_key)
-    return _run_python_forecast(worklogs, forecast_months=months, include_historical=True)
+    # Try project-specific forecast first
+    try:
+        worklogs = _fetch_worklogs_for_forecast(project_key=project_key)
+        result = _run_python_forecast(worklogs, forecast_months=months, include_historical=True)
+        return result
+    except RuntimeError as exc:
+        # If project has insufficient data and we have a project_key, fallback to global data
+        if project_key and "Insufficient monthly data" in str(exc):
+            try:
+                global_worklogs = _fetch_worklogs_for_forecast(project_key=None)
+                result = _run_python_forecast(global_worklogs, forecast_months=months, include_historical=True)
+                # Add a warning note that global data was used
+                result["forecast_note"] = f"Projektet {project_key} har for lite historisk data. Prognosen baseras pa global data istallet."
+                return result
+            except Exception:
+                # If global also fails, re-raise original error
+                raise exc
+        raise
 
 
 def _format_project_info(data):
@@ -267,11 +289,11 @@ def _format_project_info(data):
     last_logged_issue = data.get("lastLoggedIssue") or "Ingen"
 
     return (
-        f"Projekt: {project_name} ({project_key})\n\n"
-        f"Totalt: {total_hours if total_hours is not None else '-'} timmar\n\n"
-        f"Contributors: {contributors}\n\n"
-        f"Startdatum: {start_date}\n\n"
-        f"Senaste loggad issue: {last_logged_issue}"
+        f"📋 {project_name} ({project_key})\n"
+        f"🕐  {total_hours if total_hours is not None else '-'} timmar\n"
+        f"🧍 {contributors} arbetare\n"
+        f"📅 Startdatum: {start_date}\n"
+        f"🎯 Senaste issue: {last_logged_issue}"
     )
 
 
@@ -285,7 +307,7 @@ def _format_project_search(data):
     for project in data[:10]:
         name = project.get("projectName") or "Okant projektnamn"
         key = project.get("projectKey") or "-"
-        lines.append(f"- {name} ({key})")
+        lines.append(f"📋 {name} ({key})")
     return "\n".join(lines)
 
 
@@ -301,9 +323,9 @@ def _format_last_week_project_hours(data):
     formatted_duration = data.get("formattedDuration") or "0 timmar 0 minuter"
 
     return (
-        f"Projekt: {project_name} ({project_key})\n"
-        f"Period: {start_date} till {end_date} (mandag-sondag, svensk tid)\n"
-        f"Loggad tid: {formatted_duration}"
+        f"📋 {project_name} ({project_key})\n"
+        f"📅 Period: {start_date} - {end_date}\n"
+        f"🕐  Loggad tid: {formatted_duration}"
     )
 
 
@@ -328,9 +350,14 @@ def _is_last_week_hours_request(user_text):
 
     has_week_marker = any(marker in lowered for marker in week_markers)
     has_time_marker = any(marker in lowered for marker in time_markers)
+    
+    # Check for explicit project word OR a project key (2-10 capital letters) OR a project name
     has_project_marker = any(marker in lowered for marker in project_markers)
+    has_project_key = bool(re.search(r"\b[A-Z]{2,10}\b", user_text))
+    # If it has week + time markers, treat it as a project hours request even without explicit "projekt"
+    has_implicit_project = has_week_marker and has_time_marker
 
-    return has_week_marker and has_time_marker and has_project_marker
+    return has_week_marker and has_time_marker and (has_project_marker or has_project_key or has_implicit_project)
 
 
 def _format_forecast_summary(data):
@@ -347,13 +374,18 @@ def _format_forecast_summary(data):
         monthly = data.get("monthly_predictions") or []
 
     if monthly:
-        lines = ["Prognos framat:"]
+        lines = ["📈 Prognos framat:"]
         for item in monthly[:6]:
             month = item.get("month") or item.get("period") or "Okand period"
             hours = item.get("predicted_hours")
             if hours is None:
                 hours = item.get("hours")
-            lines.append(f"- {month}: {hours if hours is not None else '-'} timmar")
+            lines.append(f"🕐  {month}: {hours if hours is not None else '-'} timmar")
+        
+        # Add note if using fallback global data
+        if data.get("forecast_note"):
+            lines.append(f"\n⚠️  {data.get('forecast_note')}")
+        
         return "\n".join(lines)
 
     summary = data.get("summary")
@@ -361,9 +393,9 @@ def _format_forecast_summary(data):
         total_hours = summary.get("total_hours", "-")
         avg_weekly = summary.get("average_weekly_hours", "-")
         return (
-            "Sammanfattning:\n"
-            f"- Totala timmar: {total_hours}\n"
-            f"- Genomsnitt per vecka: {avg_weekly}"
+            "📈 Sammanfattning:\n"
+            f"🕐  Totala timmar: {total_hours}\n"
+            f"📊 Genomsnitt per vecka: {avg_weekly}"
         )
 
     return "Jag kunde inte hitta en sammanfattning i prognosdatan."
@@ -376,14 +408,14 @@ def _format_historical(data):
     current = data.get("current_period", {})
     summary = data.get("summary", {})
     lines = [
-        "Historisk jamforelse:",
+        "📊 Historisk jamforelse:",
         (
-            f"- Nuvarande period: {current.get('year', '-')}"
+            f"📅 Nuvarande period: {current.get('year', '-')}"
             f"-{str(current.get('month', '-')).zfill(2)}"
-            f", timmar: {current.get('total_hours', '-')}, anvandare: {current.get('active_users', '-')}"
+            f" | 🕐  {current.get('total_hours', '-')} timmar | 🧍 {current.get('active_users', '-')} anvandare"
         ),
-        f"- Trend: {summary.get('trend', '-')}",
-        f"- Snitt timmar over ar: {summary.get('average_hours_across_years', '-')}",
+        f"📈 Trend: {summary.get('trend', '-')}",
+        f"📉 Snitt timmar over ar: {summary.get('average_hours_across_years', '-')}",
     ]
     return "\n".join(lines)
 
@@ -397,12 +429,12 @@ def _format_analytics(data):
     start_date = date_range.get("start_date") or date_range.get("start") or "-"
     end_date = date_range.get("end_date") or date_range.get("end") or "-"
     return (
-        "Arbetsbelastningsanalys:\n"
-        f"- Period: {start_date} till {end_date}\n"
-        f"- Totala timmar: {summary.get('total_hours', '-')}\n"
-        f"- Totalt antal worklogs: {summary.get('total_worklogs', '-')}\n"
-        f"- Antal anvandare: {summary.get('unique_users', '-')}\n"
-        f"- Genomsnitt per vecka: {summary.get('average_weekly_hours', '-')}"
+        "📊 Arbetsbelastningsanalys:\n"
+        f"📅 Period: {start_date} - {end_date}\n"
+        f"🕐  Totala timmar: {summary.get('total_hours', '-')}\n"
+        f"📋 Worklogs: {summary.get('total_worklogs', '-')}\n"
+        f"🧍 Arbetare: {summary.get('unique_users', '-')}\n"
+        f"📈 Veckosnitt: {summary.get('average_weekly_hours', '-')} timmar"
     )
 
 
@@ -493,6 +525,9 @@ def _extract_last_suggestion(messages):
         if msg.get("role") == "assistant":
             content = msg.get("content", "").lower()
             if "vill du se" in content or "vill du" in content:
+                # Check for historical comparison first (higher priority)
+                if "jämföra" in content or "jamfora" in content or ("tidigare" in content and "år" in content):
+                    return "historisk"
                 if "prognos" in content or "forecast" in content:
                     return "prognos"
                 if "historik" in content or "history" in content:
@@ -529,8 +564,8 @@ def _run_intent_command(user_text, messages=None):
 
         if suggestion == "prognos":
             months = 3
-            project_key = _get_context_project_key(messages)
-            forecast_data = _run_forecast_pipeline(months=months, project_key=project_key)
+            # Always use global data for "ja" prognos suggestion
+            forecast_data = _run_forecast_pipeline(months=months, project_key=None)
             formatted = _format_forecast_summary(forecast_data)
             return _format_with_model("forecast:python-ml", formatted, "Vad ar prognosen?", messages)
 
@@ -580,7 +615,7 @@ def _run_intent_command(user_text, messages=None):
             project_key = key_match.group(0)
             data = _http_get_json("/api/reporting/project-info", {"projectKey": project_key})
             formatted = _format_project_info(data)
-            return f"{formatted}\n\nVill du se tidsplan och prognos for projektet?"
+            return f"{formatted}\n\n📈 Vill du se prognos for projektet?"
 
         query = _guess_project_query(user_text)
         if not query:
@@ -594,7 +629,7 @@ def _run_intent_command(user_text, messages=None):
             if project_key:
                 project_data = _http_get_json("/api/reporting/project-info", {"projectKey": project_key})
                 formatted = _format_project_info(project_data)
-                return f"{formatted}\n\nVill du se tidsplan och prognos for projektet?"
+                return f"{formatted}\n\n📈 Vill du se prognos for projektet?"
 
         formatted = _format_project_search(projects)
         return _format_with_model("report:search-projects", formatted, user_text, messages)
@@ -608,12 +643,15 @@ def _run_intent_command(user_text, messages=None):
     if "forecast" in lowered or "prognos" in lowered:
         months_match = re.search(r"\b([1-9]|1[0-2])\b", user_text)
         months = int(months_match.group(1)) if months_match else 3
-        project_key = _get_context_project_key(messages)
+        # Check if user explicitly asked for a specific project in this message
+        explicit_project_match = re.search(r"(?:projekt(?:et)?|project)\s*(?:om|for|for|kring)?\s+([a-zA-Z0-9_-]+)", user_text, flags=re.IGNORECASE)
+        project_key = explicit_project_match.group(1) if explicit_project_match else None
+        # Always use global data for generic "prognos" requests unless explicitly asking for a project
         forecast_data = _run_forecast_pipeline(months=months, project_key=project_key)
         formatted = _format_forecast_summary(forecast_data)
         return _format_with_model("forecast:python-ml", formatted, user_text, messages)
 
-    if "historisk" in lowered or "year" in lowered:
+    if "historisk" in lowered or "year" in lowered or "år" in lowered or "jamfora" in lowered or "jämför" in lowered or ("tidigare" in lowered and ("år" in lowered or "resultat" in lowered or "timmar" in lowered)):
         data = _http_get_json("/api/reporting/historical", {})
         formatted = _format_historical(data)
         return _format_with_model("report:historical", formatted, user_text, messages)
@@ -626,22 +664,26 @@ def _run_intent_command(user_text, messages=None):
         return _format_with_model("report:analytics", formatted, user_text, messages)
 
     return (
-        "Jag ar nu kopplad till Node Reporting API och Python Forecast API. "
-        "Fraga till exempel om projektinfo, prognos, historisk jamforelse eller analys."
+        "🤖 Jag är nu kopplad till Node Reporting API och Python Forecast API."
+        "📋 Du kan fråga om:"
+        "📊 Projektinfo"
+        "📈 Prognos"
+        "📉 Historisk jämforelse"
+        "📊 Arbetsbelastningsanalys"
     )
 
 
 def ask_project_ai(messages):
     user_messages = [m.get("content", "") for m in messages if m.get("role") == "user"]
     if not user_messages:
-        return "Jag behover ett anvandarmeddelande for att kunna svara."
+        return "Jag behöver ett användarmeddelande för att kunna svara."
 
     latest_user_message = user_messages[-1]
 
     try:
         return _run_intent_command(latest_user_message, messages)
     except Exception as exc:  # pragma: no cover
-        return f"Kunde inte hamta data via API/router. Fel: {exc}"
+        return f"Kunde inte hämta data via API/router. Fel: {exc}"
 
 
 def _run_chat_json_mode():
