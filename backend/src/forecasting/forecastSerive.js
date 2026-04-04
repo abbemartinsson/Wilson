@@ -183,6 +183,5 @@ async function getComprehensiveWorkloadForecast(options = {}) {
 }
 
 module.exports = {
-	generateWorkloadForecast,
 	getComprehensiveWorkloadForecast
 };

@@ -10,32 +10,8 @@ Backend för att samla historisk projektdata från **Jira** och **Tempo** och la
 npm install
 ```
 
-Skapa `.env`-fil i `src/config/` med:
-```
-SUPABASE_URL=din-supabase-url
-SUPABASE_ANON_KEY=din-anon-key
-SUPABASE_SERVICE_ROLE_KEY=din-service-role-key
-JIRA_BASE_URL=din-jira-url
-JIRA_EMAIL=din-email
-JIRA_API_TOKEN=ditt-api-token
-TEMPO_API_TOKEN=ditt-tempo-token
-
-# Slack Bot
-SLACK_BOT_TOKEN=xoxb-your-token-here
-SLACK_SIGNING_SECRET=your-signing-secret-here
-SLACK_APP_TOKEN=xapp-your-app-token-here
-SLACK_SOCKET_MODE=true
-SLACK_REPLY_IN_THREAD=false
-SLACK_ROUTER_MAX_MESSAGES=20
-
-# Python chatbot-router -> Node Reporting API
-NODE_REPORTING_API_URL=http://localhost:3000
-ROUTER_HTTP_TIMEOUT_SECONDS=30
-FORECAST_HISTORY_MONTHS=24
-
-# Gemini
-GOOGLE_API_KEY=din-google-api-key
-```
+Skapa `.env`-fil i `src/config/` genom att kopiera innehållet från
+`src/config/envtemplate` och fylla i dina riktiga värden.
 
 ---
 
@@ -328,7 +304,8 @@ src/
 ├── services/         Affärslogik
 ├── forecasting/      Analys och prognoser
 ├── scripts/          Körbara scripts
-└── slack/            Slack-integration (kommande)
+├── slack-bot.js      Slack bot entrypoint
+└── slackCommands.js  Kommandon för Slack-boten
 ```
 
 ---

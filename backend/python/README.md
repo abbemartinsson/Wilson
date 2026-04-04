@@ -73,12 +73,16 @@ Modellen tränas med:
 
 ## Användning från Node.js
 
-Systemet anropas automatiskt från `forecastService.js`:
+Systemet anropas automatiskt från `src/forecasting/forecastSerive.js`
+och via Python-routern i `src/services/pythonRouterService.js`.
+
+Exempel (från forecasting-modulen):
 
 ```javascript
-const forecast = await forecastService.generateWorkloadForecast({
+const forecastService = require('./src/forecasting/forecastSerive');
+
+const report = await forecastService.getComprehensiveWorkloadForecast({
   forecastMonths: 3,
-  includeHistorical: true
 });
 ```
 
@@ -98,7 +102,7 @@ const forecast = await forecastService.generateWorkloadForecast({
 
 ### Import errors
 - Vissa installationer kräver `python3` istället för `python`
-- Uppdatera `forecastService.js` om annan Python-kommando behövs
+- Sätt `PYTHON_EXECUTABLE` i miljön om annat Python-kommando/binär behövs
 
 ## Prestandatips
 

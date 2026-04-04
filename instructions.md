@@ -301,25 +301,31 @@ Typiskt arbetsflöde:
 
 # Slack-integration
 
-Användare ska kunna interagera med systemet via Slack.
+Användare kan interagera med systemet via Slack, främst i DM med boten.
 
-Slack kommer använda **slash commands**.
+I nuvarande implementation används textkommandon med `!`-prefix.
 
 Exempel:
 
 ```
-/forecast PROJECTKEY
-/project-hours PROJECTKEY
+!project info HULTP
+!project search hulta
+!workload 3
+!historical 3
 ```
+
+Utöver kommandon kan boten även skicka vanliga frågor vidare till Python-router för AI-svar.
 
 Flödet blir:
 
 ```
-Slack command
+Slack DM / kommando
    ↓
-Backend
+Node backend (Slack bot)
    ↓
-Python analys
+Python chatbot-router
+   ↓
+Node Reporting API + Python forecast-pipeline
    ↓
 Svar till Slack
 ```

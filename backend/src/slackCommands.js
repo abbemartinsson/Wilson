@@ -685,8 +685,5 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
 }
 
 module.exports = {
-  HELP_MESSAGE,
-  commandMap,
   handleTextCommand,
-  parseCommandText,
 };
