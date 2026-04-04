@@ -162,7 +162,7 @@ No project found for key: HULTP
 
 #### 3. Arbetsbelastningsprognos (ML)
 
-Generera ML-baserad prognos för framtida arbetsbelastning med Prophet time series modell.
+Generera ML-baserad prognos för framtida arbetsbelastning med Python-tränad modell.
 
 **Kommando:**
 ```bash
@@ -176,7 +176,7 @@ npm run report:workload-forecast -- 6
 ```
 
 **Output:**
-- Veckovisa och månadsvisa prognoser med konfidensintervall
+- Månadsvisa prognoser med konfidensintervall
 - Historisk jämförelse (samma period tidigare år)
 - Nuvarande trender och statistik
 - Antal aktiva användare per period
@@ -188,43 +188,7 @@ npm run report:workload-forecast -- 6
 
 ---
 
-#### 4. Prognossammanfattning
-
-Få en förenklad sammanfattning av arbetsbelastningsprognosen.
-
-**Kommando:**
-```bash
-npm run report:forecast-summary -- [MÅNADER]
-```
-
-**Exempel:**
-```bash
-npm run report:forecast-summary -- 3
-```
-
-**Output:**
-```json
-{
-  "summary": {
-    "forecast_period": "Next 3 months",
-    "current_trend": "increasing",
-    "last_4_weeks_hours": 320.5,
-    "current_active_users": 12
-  },
-  "monthly_predictions": [
-    {
-      "month": "2026-04",
-      "predicted_hours": 350,
-      "range": "310 - 390 hours",
-      "confidence": "medium"
-    }
-  ]
-}
-```
-
----
-
-#### 5. Historisk jämförelse
+#### 4. Historisk jämförelse
 
 Jämför aktuell månad med samma månad tidigare år (year-over-year).
 
@@ -281,7 +245,7 @@ npm run report:historical -- 12 2025 2
 
 ---
 
-#### 6. Arbetsbelastningsanalys
+#### 5. Arbetsbelastningsanalys
 
 Få detaljerad analys av arbetsbelastning för en specifik period.
 
@@ -327,7 +291,7 @@ pip install -r requirements.txt
 
 **Requirements:**
 - Python 3.8+
-- pandas, numpy, scikit-learn, prophet
+- pandas, numpy, python-dateutil
 
 Se [python/README.md](python/README.md) för mer information.
 

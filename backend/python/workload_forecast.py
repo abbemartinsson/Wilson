@@ -1,137 +1,180 @@
 #!/usr/bin/env python3
 """
-Workload forecasting using Prophet for time series prediction.
+Workload forecasting using a Python ML model.
 Reads historical worklog data from stdin and outputs forecast to stdout.
 """
 import sys
 import json
-import pandas as pd
-import numpy as np
-from datetime import datetime, timedelta
-from prophet import Prophet
 import warnings
+from datetime import datetime, timedelta
 
-warnings.filterwarnings('ignore')
+import numpy as np
+import pandas as pd
+
+warnings.filterwarnings("ignore")
 
 
-def prepare_data(worklogs):
+def prepare_weekly_data(worklogs):
     """
-    Convert worklog data to Prophet format (ds, y).
-    Group by week and calculate total hours worked.
+    Convert raw worklogs to weekly aggregates.
     """
     if not worklogs:
         raise ValueError("No worklog data provided")
-    
+
     df = pd.DataFrame(worklogs)
-    
-    # Convert started_at to datetime
-    df['started_at'] = pd.to_datetime(df['started_at'])
-    
-    # Ignore future worklogs to avoid training on planned/incorrect future dates.
-    now = pd.Timestamp.now(tz=df['started_at'].dt.tz)
-    df = df[df['started_at'] <= now]
+    df["started_at"] = pd.to_datetime(df["started_at"], utc=True, errors="coerce")
+    df = df.dropna(subset=["started_at", "time_spent_seconds"])
 
     if df.empty:
-        raise ValueError("No historical worklogs available (all records are in the future)")
+        raise ValueError("No valid worklog rows after parsing timestamps")
 
-    # Convert seconds to hours
-    df['hours'] = df['time_spent_seconds'] / 3600.0
-    
-    # Group by week
-    df['week_start'] = df['started_at'].dt.to_period('W').dt.start_time
-    
-    # Aggregate by week
-    weekly_data = df.groupby('week_start').agg({
-        'hours': 'sum',
-        'user_id': 'nunique'  # Count unique users per week
-    }).reset_index()
-    
-    weekly_data.columns = ['ds', 'y', 'active_users']
-    
-    return weekly_data
+    now = pd.Timestamp.utcnow()
+    df = df[df["started_at"] <= now]
 
+    if df.empty:
+        raise ValueError("No historical worklogs available (all rows are future-dated)")
 
-def train_and_forecast(df, periods_months=3):
-    """
-    Train Prophet model and generate forecast.
-    
-    Args:
-        df: DataFrame with columns [ds, y, active_users]
-        periods_months: Number of months to forecast
-    
-    Returns:
-        dict with forecast data
-    """
-    # Configure Prophet model
-    model = Prophet(
-        yearly_seasonality=True,
-        weekly_seasonality=False,
-        daily_seasonality=False,
-        changepoint_prior_scale=0.05,  # Lower = less flexible, more stable
-        seasonality_prior_scale=10.0
+    df["hours"] = pd.to_numeric(df["time_spent_seconds"], errors="coerce").fillna(0.0) / 3600.0
+    df["week_start"] = df["started_at"].dt.to_period("W-MON").dt.start_time
+
+    weekly = (
+        df.groupby("week_start")
+        .agg(hours=("hours", "sum"), active_users=("user_id", "nunique"))
+        .reset_index()
+        .rename(columns={"week_start": "ds", "hours": "y"})
     )
-    
-    # Fit model
-    model.fit(df[['ds', 'y']])
-    
+
+    weekly["ds"] = pd.to_datetime(weekly["ds"]).dt.tz_localize(None)
+    weekly = weekly.sort_values("ds").reset_index(drop=True)
+    return weekly
+
+
+def build_training_matrix(series):
+    """
+    Build lag/time features for supervised learning.
+    """
+    values = list(series)
+    rows = []
+    for i in range(4, len(values)):
+        month_index = i + 1
+        month_of_year = ((month_index - 1) % 12) + 1
+        rows.append(
+            {
+                "lag1": values[i - 1],
+                "lag2": values[i - 2],
+                "lag3": values[i - 3],
+                "lag4": values[i - 4],
+                "trend": month_index,
+                "sin12": np.sin(2 * np.pi * month_of_year / 12.0),
+                "cos12": np.cos(2 * np.pi * month_of_year / 12.0),
+                "target": values[i],
+            }
+        )
+
+    if not rows:
+        raise ValueError("Not enough monthly samples for model training")
+
+    train_df = pd.DataFrame(rows)
+    feature_cols = ["lag1", "lag2", "lag3", "lag4", "trend", "sin12", "cos12"]
+    return train_df[feature_cols], train_df["target"], feature_cols
+
+
+def fit_linear_model(x_train, y_train, alpha=1e-3):
+    """
+    Fit a regularized linear model using the closed-form ridge solution.
+    """
+    x = x_train.to_numpy(dtype=float)
+    y = y_train.to_numpy(dtype=float)
+    ones = np.ones((x.shape[0], 1), dtype=float)
+    x_aug = np.concatenate([ones, x], axis=1)
+
+    identity = np.eye(x_aug.shape[1], dtype=float)
+    identity[0, 0] = 0.0  # do not regularize intercept
+
+    weights = np.linalg.pinv(x_aug.T @ x_aug + alpha * identity) @ x_aug.T @ y
+
+    def predict_fn(features_df):
+        fx = features_df.to_numpy(dtype=float)
+        fones = np.ones((fx.shape[0], 1), dtype=float)
+        fx_aug = np.concatenate([fones, fx], axis=1)
+        return fx_aug @ weights
+
+    return predict_fn
+
+
+def aggregate_monthly(weekly_df):
+    monthly = weekly_df.copy()
+    monthly["month"] = monthly["ds"].dt.to_period("M")
+    grouped = monthly.groupby("month", as_index=False).agg(y=("y", "sum"), active_users=("active_users", "mean"))
+    grouped["month"] = grouped["month"].astype(str)
+    return grouped
+
+
+def train_and_forecast_months(weekly_df, periods_months=3):
+    """
+    Train a RandomForest model on monthly workload and forecast future months.
+    """
+    monthly_df = aggregate_monthly(weekly_df)
+    if len(monthly_df) < 8:
+        raise ValueError(f"Insufficient monthly data for forecasting. Need at least 8 months, got {len(monthly_df)}")
+
+    monthly_values = monthly_df["y"].astype(float).tolist()
+    x_train, y_train, feature_cols = build_training_matrix(monthly_values)
+
+    predict_fn = fit_linear_model(x_train, y_train)
+
+    residuals = y_train.values - predict_fn(x_train)
+    residual_std = float(np.std(residuals)) if len(residuals) > 1 else 0.0
+    interval_width = max(5.0, 1.96 * residual_std)
+
     now = datetime.now()
-    next_month_start = datetime(now.year, now.month, 1) + pd.DateOffset(months=1)
-    next_month_start = pd.Timestamp(next_month_start).to_pydatetime()
-    horizon_end = (pd.Timestamp(next_month_start) + pd.DateOffset(months=periods_months) - pd.Timedelta(days=1)).to_pydatetime()
+    first_month = pd.Timestamp(datetime(now.year, now.month, 1)) + pd.DateOffset(months=1)
 
-    # Forecast enough weekly points to cover the full month horizon.
-    last_training_date = pd.to_datetime(df['ds']).max().to_pydatetime()
-    days_to_cover = (horizon_end - last_training_date).days
-    weeks_to_forecast = max(1, int(np.ceil(days_to_cover / 7.0)) + 2)
-    
-    # Create future dataframe
-    future = model.make_future_dataframe(periods=weeks_to_forecast, freq='W-MON')
-    
-    # Generate forecast
-    forecast = model.predict(future)
-    
-    # Extract relevant columns
-    full_weekly = forecast[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].tail(weeks_to_forecast).copy()
+    rolling = monthly_values[-4:]
+    monthly_forecast = []
+    for step in range(1, periods_months + 1):
+        forecast_month_ts = first_month + pd.DateOffset(months=step - 1)
+        month_index = len(monthly_values) + step
+        month_of_year = ((month_index - 1) % 12) + 1
 
-    # Keep only points from the forecast period and expand weekly values over days
-    # so monthly totals align with calendar month boundaries.
-    forecast_result = full_weekly[full_weekly['ds'] > pd.to_datetime(last_training_date)].copy()
-
-    daily_rows = []
-    for _, row in forecast_result.iterrows():
-        week_start = pd.to_datetime(row['ds'])
-        for offset in range(7):
-            day = week_start + pd.Timedelta(days=offset)
-            if pd.Timestamp(next_month_start) <= day <= pd.Timestamp(horizon_end):
-                daily_rows.append({
-                    'date': day,
-                    'yhat': row['yhat'] / 7.0,
-                    'yhat_lower': row['yhat_lower'] / 7.0,
-                    'yhat_upper': row['yhat_upper'] / 7.0
-                })
-
-    if daily_rows:
-        daily_df = pd.DataFrame(daily_rows)
-        daily_df['month'] = daily_df['date'].dt.to_period('M')
-        monthly_forecast = daily_df.groupby('month').agg({
-            'yhat': 'sum',
-            'yhat_lower': 'sum',
-            'yhat_upper': 'sum'
-        }).reset_index()
-    else:
-        monthly_forecast = pd.DataFrame(columns=['month', 'yhat', 'yhat_lower', 'yhat_upper'])
-
-    monthly_forecast['month'] = monthly_forecast['month'].astype(str)
-    monthly_forecast.columns = ['month', 'predicted_hours', 'lower_bound', 'upper_bound']
-    
-    return {
-        'weekly_forecast': forecast_result[['ds', 'yhat', 'yhat_lower', 'yhat_upper']].to_dict('records'),
-        'monthly_forecast': monthly_forecast.to_dict('records'),
-        'model_stats': {
-            'training_samples': len(df),
-            'forecast_weeks': weeks_to_forecast,
-            'forecast_months': periods_months
+        feature_row = {
+            "lag1": rolling[-1],
+            "lag2": rolling[-2],
+            "lag3": rolling[-3],
+            "lag4": rolling[-4],
+            "trend": month_index,
+            "sin12": np.sin(2 * np.pi * month_of_year / 12.0),
+            "cos12": np.cos(2 * np.pi * month_of_year / 12.0),
         }
+        x_future = pd.DataFrame([feature_row])[feature_cols]
+        prediction = float(predict_fn(x_future)[0])
+        prediction = max(0.0, prediction)
+
+        lower = max(0.0, prediction - interval_width)
+        upper = prediction + interval_width
+
+        monthly_forecast.append(
+            {
+                "month": forecast_month_ts.strftime("%Y-%m"),
+                "predicted_hours": round(prediction, 2),
+                "lower_bound": round(lower, 2),
+                "upper_bound": round(upper, 2),
+            }
+        )
+
+        rolling.append(prediction)
+        rolling = rolling[-4:]
+
+    return {
+        "weekly_forecast": [],
+        "monthly_forecast": monthly_forecast,
+        "model_stats": {
+            "training_samples_weeks": len(weekly_df),
+            "training_samples_months": len(monthly_df),
+            "forecast_months": periods_months,
+            "model": "RidgeLinearRegression",
+            "features": feature_cols,
+        },
     }
 
 
@@ -203,13 +246,13 @@ def main():
             raise ValueError("No worklog data provided")
         
         # Prepare data
-        df = prepare_data(worklogs)
+        df = prepare_weekly_data(worklogs)
         
         if len(df) < 8:
             raise ValueError(f"Insufficient data for forecasting. Need at least 8 weeks, got {len(df)}")
         
-        # Generate forecast
-        forecast_result = train_and_forecast(df, forecast_months)
+        # Train model and forecast coming months
+        forecast_result = train_and_forecast_months(df, forecast_months)
         
         # Calculate historical comparison
         historical_comparison = []

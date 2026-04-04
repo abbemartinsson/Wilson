@@ -54,6 +54,10 @@ COMMAND_SCHEMA = {
         "description": "Sök efter projekt baserat på namn eller nyckel",
         "input": "sökterm (t.ex. hulta)",
     },
+    "report:project-last-week-hours": {
+        "description": "Hamta loggade timmar for forra veckan (mandag-sondag, svensk tid)",
+        "input": "projectKey (t.ex. HULTP)",
+    },
     "forecast:python-ml": {
         "description": "Köra Python ML-forecast baserat på historiska worklogs",
         "input": "antal manader (1-12)",
@@ -291,6 +295,50 @@ def _format_project_search(data):
     return "\n".join(lines)
 
 
+def _format_last_week_project_hours(data):
+    if not isinstance(data, dict):
+        return "Jag kunde inte tolka timmarna for forra veckan."
+
+    project_name = data.get("projectName") or "Okant projekt"
+    project_key = data.get("projectKey") or "-"
+    period = data.get("period") or {}
+    start_date = period.get("startDate") or "-"
+    end_date = period.get("endDate") or "-"
+    formatted_duration = data.get("formattedDuration") or "0 timmar 0 minuter"
+
+    return (
+        f"Projekt: {project_name} ({project_key})\n"
+        f"Period: {start_date} till {end_date} (mandag-sondag, svensk tid)\n"
+        f"Loggad tid: {formatted_duration}"
+    )
+
+
+def _is_last_week_hours_request(user_text):
+    lowered = user_text.lower()
+
+    week_markers = (
+        "forra veckan",
+        "förra veckan",
+        "last week",
+    )
+    time_markers = (
+        "loggad",
+        "timmar",
+        "tid",
+        "antal",
+    )
+    project_markers = (
+        "projekt",
+        "project",
+    )
+
+    has_week_marker = any(marker in lowered for marker in week_markers)
+    has_time_marker = any(marker in lowered for marker in time_markers)
+    has_project_marker = any(marker in lowered for marker in project_markers)
+
+    return has_week_marker and has_time_marker and has_project_marker
+
+
 def _format_forecast_summary(data):
     if not isinstance(data, dict):
         return "Jag kunde inte tolka prognosdatan."
@@ -504,6 +552,33 @@ def _run_intent_command(user_text, messages=None):
 
     if lowered in ("nej", "na", "no", "nope"):
         return "Okej, vad vill du veta i stallet?"
+
+    if _is_last_week_hours_request(user_text):
+        key_match = re.search(r"\b[A-Z]{2,10}\b", user_text)
+        if key_match:
+            project_key = key_match.group(0)
+            try:
+                data = _http_get_json("/api/reporting/project-last-week-hours", {"projectKey": project_key})
+                formatted = _format_last_week_project_hours(data)
+                return _format_with_model("report:project-last-week-hours", formatted, user_text, messages)
+            except RuntimeError:
+                pass
+
+        query = _guess_project_query(user_text)
+        if not query:
+            return "Jag kunde inte tolka vilket projekt du menar. Skriv garna projektnyckeln, till exempel HULTP."
+
+        projects = _http_get_json("/api/reporting/search-projects", {"query": query})
+
+        if isinstance(projects, list) and projects:
+            first = _pick_best_project(projects, user_text) or projects[0]
+            project_key = first.get("projectKey")
+            if project_key:
+                data = _http_get_json("/api/reporting/project-last-week-hours", {"projectKey": project_key})
+                formatted = _format_last_week_project_hours(data)
+                return _format_with_model("report:project-last-week-hours", formatted, user_text, messages)
+
+        return "Jag hittade inget projekt som matchar den fragan."
 
     if _is_project_info_request(user_text):
         key_match = re.search(r"\b[A-Z]{2,10}\b", user_text)

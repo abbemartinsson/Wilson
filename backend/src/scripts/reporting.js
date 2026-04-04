@@ -44,6 +44,25 @@ async function main() {
       process.exit(0);
     }
 
+    if (command === 'project-last-week-hours') {
+      const projectKey = process.argv[3];
+
+      if (!projectKey) {
+        console.error('Missing project key. Usage: npm run report:project-last-week-hours <PROJECT_KEY>');
+        process.exit(1);
+      }
+
+      const report = await reportingService.getProjectLastWeekHours(projectKey);
+
+      if (!report) {
+        console.error(`No project found for key: ${projectKey}`);
+        process.exit(1);
+      }
+
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(0);
+    }
+
     if (command === 'workload-forecast') {
       const months = parseInt(process.argv[3]) || 3;
 
@@ -52,29 +71,10 @@ async function main() {
         process.exit(1);
       }
 
-      console.log(`Generating ${months}-month workload forecast...`);
-
       const forecast = await reportingService.getWorkloadForecast(months);
 
-      console.log('=== WORKLOAD FORECAST ===\n');
-      console.log(JSON.stringify(forecast, null, 2));
-      process.exit(0);
-    }
-
-    if (command === 'workload-forecast-summary') {
-      const months = parseInt(process.argv[3]) || 3;
-
-      if (months < 1 || months > 12) {
-        console.error('Invalid months value. Must be between 1 and 12.');
-        process.exit(1);
-      }
-
-      console.log(`Generating ${months}-month forecast summary...\n`);
-
-      const summary = await reportingService.getWorkloadForecastSummary(months);
-
-      console.log('=== WORKLOAD FORECAST SUMMARY ===\n');
-      console.log(JSON.stringify(summary, null, 2));
+      const monthlyHours = forecast?.forecast?.monthly_forecast || [];
+      console.log(JSON.stringify(monthlyHours, null, 2));
       process.exit(0);
     }
 
@@ -119,9 +119,9 @@ async function main() {
     console.error('Unknown command.');
     console.error('\nSupported commands:');
     console.error('  get-project-info <PROJECT_KEY>');
+    console.error('  project-last-week-hours <PROJECT_KEY>');
     console.error('  search-projects <QUERY>');
     console.error('  workload-forecast [MONTHS]');
-    console.error('  workload-forecast-summary [MONTHS]');
     console.error('  historical-comparison [MONTH] [YEAR] [YEARS_BACK]');
     console.error('  workload-analytics [MONTHS_BACK]');
     process.exit(1);

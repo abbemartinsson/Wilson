@@ -31,6 +31,24 @@ app.get('/api/reporting/project-info', async (req, res) => {
   }
 });
 
+app.get('/api/reporting/project-last-week-hours', async (req, res) => {
+  try {
+    const projectKey = String(req.query.projectKey || '').trim();
+    if (!projectKey) {
+      return res.status(400).json({ error: 'projectKey is required' });
+    }
+
+    const report = await reportingService.getProjectLastWeekHours(projectKey);
+    if (!report) {
+      return res.status(404).json({ error: `No project found for key: ${projectKey}` });
+    }
+
+    return res.json(report);
+  } catch (error) {
+    return res.status(500).json({ error: error.message || 'Internal server error' });
+  }
+});
+
 app.get('/api/reporting/search-projects', async (req, res) => {
   try {
     const query = String(req.query.query || '').trim();
@@ -54,20 +72,6 @@ app.get('/api/reporting/workload-forecast', async (req, res) => {
 
     const forecast = await reportingService.getWorkloadForecast(months);
     return res.json(forecast);
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Internal server error' });
-  }
-});
-
-app.get('/api/reporting/forecast-summary', async (req, res) => {
-  try {
-    const months = Number.parseInt(req.query.months, 10) || 3;
-    if (months < 1 || months > 12) {
-      return res.status(400).json({ error: 'months must be between 1 and 12' });
-    }
-
-    const summary = await reportingService.getWorkloadForecastSummary(months);
-    return res.json(summary);
   } catch (error) {
     return res.status(500).json({ error: error.message || 'Internal server error' });
   }
