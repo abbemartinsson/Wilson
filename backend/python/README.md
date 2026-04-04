@@ -1,6 +1,6 @@
 # Python Machine Learning för Arbetsbelastningsprognoser
 
-Detta system använder Prophet (Facebook's time series forecasting library) för att prediktera framtida arbetsbelastning baserat på historiska worklogs.
+Detta system använder en Python-baserad ML-pipeline (NumPy + Pandas) för att träna en modell på historiska worklogs och prediktera timmar framåt.
 
 ## Installation
 
@@ -29,9 +29,7 @@ pip install -r requirements.txt
 ## Dependencies
 
 - **pandas**: Datahantering och aggregering
-- **numpy**: Numeriska beräkningar
-- **scikit-learn**: Machine learning utilities
-- **prophet**: Time series forecasting (Facebook Prophet)
+- **numpy**: Numeriska beräkningar och modellträning
 - **python-dateutil**: Datumhantering
 
 ## Hur det fungerar
@@ -53,25 +51,25 @@ Scriptet tar emot JSON-data via stdin:
 ```
 
 ### Process
-1. **Data preparation**: Konverterar worklogs till veckodata och aggregerar timmar
-2. **Model training**: Tränar Prophet-modell med historiska data
-3. **Forecasting**: Genererar veckovisa och månadsvisa prognoser
+1. **Data preparation**: Konverterar worklogs till vecko- och månadsdata
+2. **Model training**: Tränar en linjär regressionsmodell (ridge-liknande) i Python
+3. **Forecasting**: Predikterar timmar för kommande månader (default 3)
 4. **Historical comparison**: Jämför med samma period tidigare år
 
 ### Output
 Scriptet returnerar JSON med:
-- Veckovisa prognoser med konfidensintervall
-- Månadsvisa aggregerade prognoser
+- Månadsvisa aggregerade prognoser med intervall
 - Historisk jämförelse (samma månad tidigare år)
 - Nuvarande statistik och trender
 - Datavalidering och kvalitetsmått
 
 ## Modellkonfiguration
 
-Prophet-modellen är konfigurerad för:
-- **Yearly seasonality**: Identifierar årsvariation
-- **Changepoint prior scale**: 0.05 (låg för stabila prognoser)
-- **Seasonality prior scale**: 10.0 (medelhög för säsongsmönster)
+Modellen tränas med:
+- **Lag features**: senaste 4 månadernas utfall
+- **Trend feature**: tidsindex för långsiktig förändring
+- **Säsongsfeatures**: sinus/cosinus för 12-månadersmönster
+- **Regularisering**: stabilare koefficienter via ridge-liknande lösning
 
 ## Användning från Node.js
 
@@ -95,7 +93,7 @@ const forecast = await forecastService.generateWorkloadForecast({
 - Kontrollera virtual environment är aktiverat
 
 ### "Insufficient data for forecasting"
-- Prophet kräver minst 8 veckors data för säkra prognoser
+- Modellen kräver minst 8 månaders data för säkra prognoser
 - Synkronisera mer historisk data från Jira/Tempo
 
 ### Import errors
@@ -104,14 +102,13 @@ const forecast = await forecastService.generateWorkloadForecast({
 
 ## Prestandatips
 
-- Första körningen tar längre tid (model training)
+- Första körningen tränar modellen direkt från historiska data
 - Mer historisk data = bättre prognoser
-- Prophet rekommenderas för data med tydliga mönster
 - Minst 3-6 månaders historik rekommenderas
 
 ## Framtida förbättringar
 
-- Support för ARIMA och andra modeller
+- Support för fler modeller (ARIMA/Prophet/XGBoost)
 - Automatisk modellval baserat på data
 - Hyperparameter tuning
 - Konfidensintervall-kalibrering

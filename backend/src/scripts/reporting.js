@@ -71,29 +71,10 @@ async function main() {
         process.exit(1);
       }
 
-      console.log(`Generating ${months}-month workload forecast...`);
-
       const forecast = await reportingService.getWorkloadForecast(months);
 
-      console.log('=== WORKLOAD FORECAST ===\n');
-      console.log(JSON.stringify(forecast, null, 2));
-      process.exit(0);
-    }
-
-    if (command === 'workload-forecast-summary') {
-      const months = parseInt(process.argv[3]) || 3;
-
-      if (months < 1 || months > 12) {
-        console.error('Invalid months value. Must be between 1 and 12.');
-        process.exit(1);
-      }
-
-      console.log(`Generating ${months}-month forecast summary...\n`);
-
-      const summary = await reportingService.getWorkloadForecastSummary(months);
-
-      console.log('=== WORKLOAD FORECAST SUMMARY ===\n');
-      console.log(JSON.stringify(summary, null, 2));
+      const monthlyHours = forecast?.forecast?.monthly_forecast || [];
+      console.log(JSON.stringify(monthlyHours, null, 2));
       process.exit(0);
     }
 
@@ -141,7 +122,6 @@ async function main() {
     console.error('  project-last-week-hours <PROJECT_KEY>');
     console.error('  search-projects <QUERY>');
     console.error('  workload-forecast [MONTHS]');
-    console.error('  workload-forecast-summary [MONTHS]');
     console.error('  historical-comparison [MONTH] [YEAR] [YEARS_BACK]');
     console.error('  workload-analytics [MONTHS_BACK]');
     process.exit(1);

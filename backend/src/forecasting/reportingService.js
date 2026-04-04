@@ -296,27 +296,11 @@ async function getWorkloadAnalytics(options = {}) {
 	}
 }
 
-/**
- * Get simple forecast summary for quick reporting.
- * 
- * @param {number} forecastMonths - Number of months to forecast
- * @returns {Promise<Object>} Simplified forecast summary
- */
-async function getWorkloadForecastSummary(forecastMonths = 3) {
-	try {
-		return await forecastService.getWorkloadForecastSummary(forecastMonths);
-	} catch (error) {
-		console.error('Error in getWorkloadForecastSummary:', error);
-		throw error;
-	}
-}
-
 module.exports = {
 	getProjectInfo,
 	searchProjects,
 	getProjectLastWeekHours,
 	getWorkloadForecast,
 	getHistoricalWorkloadComparison,
-	getWorkloadAnalytics,
-	getWorkloadForecastSummary
+	getWorkloadAnalytics
 };

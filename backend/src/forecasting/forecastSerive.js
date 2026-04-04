@@ -182,50 +182,7 @@ async function getComprehensiveWorkloadForecast(options = {}) {
 	}
 }
 
-/**
- * Generate simple forecast summary for reporting.
- * 
- * @param {number} forecastMonths - Number of months to forecast
- * @returns {Promise<Object>} Simplified forecast summary
- */
-async function getWorkloadForecastSummary(forecastMonths = 3) {
-	try {
-		const forecast = await generateWorkloadForecast({ forecastMonths });
-		
-		if (!forecast.success) {
-			throw new Error('Forecast generation failed');
-		}
-		
-		const monthlyForecasts = forecast.forecast.monthly_forecast || [];
-		const currentStats = forecast.current_stats || {};
-		
-		return {
-			summary: {
-				forecast_period: `Next ${forecastMonths} months`,
-				current_trend: currentStats.trend || 'unknown',
-				last_4_weeks_hours: currentStats.last_4_weeks_hours || 0,
-				current_active_users: currentStats.current_active_users || 0
-			},
-			monthly_predictions: monthlyForecasts.map(m => ({
-				month: m.month,
-				predicted_hours: Math.round(m.predicted_hours),
-				range: `${Math.round(m.lower_bound)} - ${Math.round(m.upper_bound)} hours`,
-				confidence: 'medium'
-			})),
-			data_quality: {
-				weeks_of_data: forecast.data_range?.total_weeks || 0,
-				data_start: forecast.data_range?.start_date,
-				data_end: forecast.data_range?.end_date
-			}
-		};
-	} catch (error) {
-		console.error('Error in getWorkloadForecastSummary:', error);
-		throw error;
-	}
-}
-
 module.exports = {
 	generateWorkloadForecast,
-	getComprehensiveWorkloadForecast,
-	getWorkloadForecastSummary
+	getComprehensiveWorkloadForecast
 };

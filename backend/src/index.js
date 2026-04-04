@@ -77,20 +77,6 @@ app.get('/api/reporting/workload-forecast', async (req, res) => {
   }
 });
 
-app.get('/api/reporting/forecast-summary', async (req, res) => {
-  try {
-    const months = Number.parseInt(req.query.months, 10) || 3;
-    if (months < 1 || months > 12) {
-      return res.status(400).json({ error: 'months must be between 1 and 12' });
-    }
-
-    const summary = await reportingService.getWorkloadForecastSummary(months);
-    return res.json(summary);
-  } catch (error) {
-    return res.status(500).json({ error: error.message || 'Internal server error' });
-  }
-});
-
 app.get('/api/reporting/historical', async (req, res) => {
   try {
     const now = new Date();
