@@ -41,14 +41,14 @@ const commandMap = {
 };
 
 const HELP_MESSAGE = [
-  'Available commands:',
+  '📚 Available commands:',
   '',
-  '!help',
-  '!project info <project_key>',
-  '!project last week <project_key>',
-  '!project search <query>',
-  '!workload',
-  '!historical [month]',
+  '• ❓ !help',
+  '• 📁 !project info <project_key>',
+  '• 📆 !project last week <project_key>',
+  '• 🔎 !project search <query>',
+  '• 📈 !workload',
+  '• 🗓 !historical [month]',
 ].join('\n');
 
 function sanitizeInput(text = '') {
