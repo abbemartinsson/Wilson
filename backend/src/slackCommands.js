@@ -524,7 +524,17 @@ async function postSlackMessage(client, channel, payload, threadTs) {
 async function handleTextCommand({ text, channel, client, logger = console, threadTs }) {
   const parsed = parseCommandText(text);
   if (!parsed) {
-    return false;
+    logger.info('Non-command text received, suggesting help command', {
+      text: sanitizeInput(text),
+    });
+
+    await postSlackMessage(
+      client,
+      channel,
+      buildMessagePayload('Tips', 'Skriv !help för att se tillgängliga kommandon.', false),
+      threadTs
+    );
+    return true;
   }
 
   const config = commandMap[parsed.commandName];
