@@ -14,17 +14,22 @@ const commandMap = {
   'project info': {
     scriptCommand: 'get-project-info',
     requiresText: true,
-    usage: '!project info <project_key>',
+    usage: '!project info <project_key_or_name>',
   },
   'project last week': {
     scriptCommand: 'project-last-week-hours',
     requiresText: true,
-    usage: '!project last week <project_key>',
+    usage: '!project last week <project_key_or_name>',
   },
-  'project search': {
-    scriptCommand: 'search-projects',
+  'project participants': {
+    scriptCommand: 'project-participants',
     requiresText: true,
-    usage: '!project search <query>',
+    usage: '!project participants <project_key_or_name>',
+  },
+  'list projects': {
+    scriptCommand: 'list-projects',
+    requiresText: false,
+    usage: '!list projects',
   },
   workload: {
     scriptCommand: 'workload-forecast',
@@ -44,9 +49,10 @@ const HELP_MESSAGE = [
   '📚 Available commands:',
   '',
   '• ❓ !help',
-  '• 📁 !project info <project_key>',
-  '• 📆 !project last week <project_key>',
-  '• 🔎 !project search <query>',
+  '• 📁 !project info <key_or_name>',
+  '• 📆 !project last week <key_or_name>',
+  '• 👥 !project participants <key_or_name>',
+  '• 📋 !list projects',
   '• 📈 !workload',
   '• 🗓 !historical [month]',
 ].join('\n');
@@ -122,6 +128,12 @@ function formatPlainLinesAsBullets(rawText) {
   return lines.map((line) => `• ${escapeMrkdwn(line)}`).join('\n');
 }
 
+function formatDateOnly(dateString) {
+  if (!dateString) return '';
+  // Extract only the date part (YYYY-MM-DD) from ISO string
+  return String(dateString).split('T')[0];
+}
+
 function formatProjectInfo(report) {
   if (!report || typeof report !== 'object') {
     return formatPlainLinesAsBullets(report);
@@ -135,11 +147,11 @@ function formatProjectInfo(report) {
   ];
 
   if (report.startDate) {
-    lines.push(`📅 Start: ${escapeMrkdwn(report.startDate)}`);
+    lines.push(`📅 Start: ${escapeMrkdwn(formatDateOnly(report.startDate))}`);
   }
 
   if (report.lastLoggedIssue) {
-    lines.push(`🕒 Senaste logg: ${escapeMrkdwn(report.lastLoggedIssue)}`);
+    lines.push(`🕒 Senaste logg: ${escapeMrkdwn(formatDateOnly(report.lastLoggedIssue))}`);
   }
 
   return lines.map((line) => `• ${line}`).join('\n');
@@ -166,18 +178,51 @@ function formatProjectLastWeek(report) {
   return lines.map((line) => `• ${line}`).join('\n');
 }
 
-function formatProjectSearchResults(results) {
-  if (!Array.isArray(results)) {
-    return formatPlainLinesAsBullets(results);
+function formatProjectParticipants(report) {
+  if (!report || typeof report !== 'object') {
+    return formatPlainLinesAsBullets(report);
   }
 
-  if (results.length === 0) {
+  const lines = [
+    `📁 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
+    `👥 ${formatNumber(report.totalParticipants ?? 0)} deltagare`,
+  ];
+
+  if (Array.isArray(report.participants) && report.participants.length > 0) {
+    lines.push('');
+    lines.push('*Deltagare:*');
+    for (const participant of report.participants) {
+      const name = escapeMrkdwn(participant.name || 'Okänd');
+      const hours = formatNumber(participant.totalHours ?? 0);
+      const email = participant.email ? ` (${escapeMrkdwn(participant.email)})` : '';
+      lines.push(`• ${name}${email} — 🕐 ${hours} timmar`);
+    }
+  }
+
+  return lines.map((line) => `${line}`).join('\n');
+}
+
+function formatProjectList(projects) {
+  if (!Array.isArray(projects)) {
+    return formatPlainLinesAsBullets(projects);
+  }
+
+  if (projects.length === 0) {
     return '• Inga projekt hittades';
   }
 
-  return results
-    .map((project) => `• ${escapeMrkdwn(project.projectName || 'Okänt projekt')} (${escapeMrkdwn(project.projectKey || 'okänd nyckel')})`)
-    .join('\n');
+  const lines = [
+    `📋 *Projekt* — ${projects.length} totalt`,
+    '',
+  ];
+
+  for (const project of projects) {
+    const key = escapeMrkdwn(project.projectKey || 'okänd nyckel');
+    const name = escapeMrkdwn(project.projectName || 'Okänt projekt');
+    lines.push(`• \`${key}\` — ${name}`);
+  }
+
+  return lines.join('\n');
 }
 
 function formatWorkloadForecast(results) {
@@ -264,8 +309,12 @@ function formatCommandOutput(commandName, rawOutput) {
     return formatProjectLastWeek(parsedOutput);
   }
 
-  if (commandName === 'project search') {
-    return formatProjectSearchResults(parsedOutput);
+  if (commandName === 'project participants') {
+    return formatProjectParticipants(parsedOutput);
+  }
+
+  if (commandName === 'list projects') {
+    return formatProjectList(parsedOutput);
   }
 
   if (commandName === 'workload') {
@@ -432,6 +481,49 @@ function buildMessagePayload(title, body, isError = false) {
   };
 }
 
+function buildMultiMessagePayload(title, body, isError = false) {
+  const safeBody = body && body.trim() ? body.trim() : 'No output.';
+  
+  // Slack section blocks show ~4 lines before "see more", so split aggressively
+  const MAX_LINES_PER_MESSAGE = 5;
+  const lines = safeBody.split('\n');
+  
+  if (lines.length <= MAX_LINES_PER_MESSAGE) {
+    // Short content, send as single message
+    return [buildMessagePayload(title, body, isError)];
+  }
+  
+  // Long content, split into multiple messages
+  const messages = [];
+  let currentContent = [];
+  
+  // First message with title
+  for (let i = 0; i < Math.min(MAX_LINES_PER_MESSAGE, lines.length); i++) {
+    currentContent.push(lines[i]);
+  }
+  
+  messages.push(buildMessagePayload(title, currentContent.join('\n'), isError));
+  
+  // Additional messages for remaining content
+  for (let i = MAX_LINES_PER_MESSAGE; i < lines.length; i += MAX_LINES_PER_MESSAGE) {
+    const chunk = lines.slice(i, Math.min(i + MAX_LINES_PER_MESSAGE, lines.length)).join('\n');
+    messages.push({
+      text: chunk,
+      blocks: [
+        {
+          type: 'section',
+          text: {
+            type: 'mrkdwn',
+            text: chunk,
+          },
+        },
+      ],
+    });
+  }
+  
+  return messages;
+}
+
 function normalizeProjectInput(value = '') {
   return String(value).trim().toLowerCase();
 }
@@ -544,14 +636,20 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
       text: sanitizeInput(text),
     });
 
-    await postSlackMessage(client, channel, buildMessagePayload('Unknown command', HELP_MESSAGE, true), threadTs);
+    const messages = buildMultiMessagePayload('Unknown command', HELP_MESSAGE, true);
+    for (const message of messages) {
+      await postSlackMessage(client, channel, message, threadTs);
+    }
     return true;
   }
 
   if (parsed.commandName === 'help') {
     logger.info('Showing help for text command', { command: parsed.commandName });
 
-    await postSlackMessage(client, channel, buildMessagePayload('Help', HELP_MESSAGE, false), threadTs);
+    const messages = buildMultiMessagePayload('Help', HELP_MESSAGE, false);
+    for (const message of messages) {
+      await postSlackMessage(client, channel, message, threadTs);
+    }
     return true;
   }
 
@@ -559,12 +657,10 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
   let scriptArgument = inputText || undefined;
 
   if (config.requiresText && !inputText) {
-    await postSlackMessage(
-      client,
-      channel,
-      buildMessagePayload('Missing input', `Usage: ${config.usage}\n\n${HELP_MESSAGE}`, true),
-      threadTs
-    );
+    const messages = buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${HELP_MESSAGE}`, true);
+    for (const message of messages) {
+      await postSlackMessage(client, channel, message, threadTs);
+    }
     return true;
   }
 
@@ -572,31 +668,27 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
     const resolvedProject = await resolveProjectKey(inputText);
 
     if (!resolvedProject) {
-      await postSlackMessage(
-        client,
-        channel,
-        buildMessagePayload(
-          'Project not found',
-          `No project matched "${inputText}".\n\n${HELP_MESSAGE}`,
-          true
-        ),
-        threadTs
+      const messages = buildMultiMessagePayload(
+        'Project not found',
+        `No project matched "${inputText}".\n\n${HELP_MESSAGE}`,
+        true
       );
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
       return true;
     }
 
     if (resolvedProject.matchedBy === 'multiple') {
       const options = formatProjectOptions(resolvedProject.candidates);
-      await postSlackMessage(
-        client,
-        channel,
-        buildMessagePayload(
-          'Multiple projects matched',
-          `Please be more specific. I found these matches for "${inputText}":\n${options}\n\n${HELP_MESSAGE}`,
-          true
-        ),
-        threadTs
+      const messages = buildMultiMessagePayload(
+        'Multiple projects matched',
+        `Please be more specific. I found these matches for "${inputText}":\n${options}\n\n${HELP_MESSAGE}`,
+        true
       );
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
       return true;
     }
 
@@ -606,12 +698,10 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
   if (config.inputMode === 'optional-months') {
     const parsedMonths = parseOptionalMonths(inputText);
     if (!parsedMonths.ok) {
-      await postSlackMessage(
-        client,
-        channel,
-        buildMessagePayload('Invalid input', `Usage: ${config.usage}\n${parsedMonths.message}\n\n${HELP_MESSAGE}`, true),
-        threadTs
-      );
+      const messages = buildMultiMessagePayload('Invalid input', `Usage: ${config.usage}\n${parsedMonths.message}\n\n${HELP_MESSAGE}`, true);
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
       return true;
     }
 
@@ -621,12 +711,10 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
   if (config.inputMode === 'historical-month') {
     const parsedMonth = parseHistoricalMonth(inputText);
     if (!parsedMonth.ok) {
-      await postSlackMessage(
-        client,
-        channel,
-        buildMessagePayload('Invalid input', `Usage: ${config.usage}\n${parsedMonth.message}\n\n${HELP_MESSAGE}`, true),
-        threadTs
-      );
+      const messages = buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${HELP_MESSAGE}`, true);
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
       return true;
     }
 
@@ -646,25 +734,25 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
     const stderr = stderrRaw ? clipText(formatPlainLinesAsBullets(stderrRaw)) : '';
 
     if (stderr) {
-      await postSlackMessage(
-        client,
-        channel,
-        buildMessagePayload(
-          `Command completed with warnings: ${COMMAND_PREFIX}${parsed.commandName}`,
-          [stdout, stderr].filter(Boolean).join('\n\n'),
-          false
-        ),
-        threadTs
+      const messages = buildMultiMessagePayload(
+        `Command completed with warnings: ${COMMAND_PREFIX}${parsed.commandName}`,
+        [stdout, stderr].filter(Boolean).join('\n\n'),
+        false
       );
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
       return true;
     }
 
-    await postSlackMessage(
-      client,
-      channel,
-      buildMessagePayload(`Command completed: ${COMMAND_PREFIX}${parsed.commandName}`, stdout, false),
-      threadTs
+    const messages = buildMultiMessagePayload(
+      `Command completed: ${COMMAND_PREFIX}${parsed.commandName}`,
+      stdout,
+      false
     );
+    for (const message of messages) {
+      await postSlackMessage(client, channel, message, threadTs);
+    }
     return true;
   } catch (failure) {
     const stderrRaw = String(failure.stderr || '').trim();
@@ -680,16 +768,14 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
       message: failure.error?.message || 'unknown error',
     });
 
-    await postSlackMessage(
-      client,
-      channel,
-      buildMessagePayload(
-        `Command failed: ${COMMAND_PREFIX}${parsed.commandName}`,
-        [timeoutText, stderr || stdout || 'No error output.', '', HELP_MESSAGE].join('\n'),
-        true
-      ),
-      threadTs
+    const messages = buildMultiMessagePayload(
+      `Command failed: ${COMMAND_PREFIX}${parsed.commandName}`,
+      [timeoutText, stderr || stdout || 'No error output.', '', HELP_MESSAGE].join('\n'),
+      true
     );
+    for (const message of messages) {
+      await postSlackMessage(client, channel, message, threadTs);
+    }
     return true;
   }
 }

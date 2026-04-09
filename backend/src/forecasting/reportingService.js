@@ -37,21 +37,32 @@ async function searchProjects(query) {
   }));
 }
 
-async function getProjectLastWeekHours(projectKey) {
-	const normalizedProjectKey = String(projectKey || '').trim().toUpperCase();
+async function getAllProjects() {
+  const projects = await analyticsRepository.getAllProjects();
 
-	if (!normalizedProjectKey) {
-		throw new Error('projectKey is required');
+  return projects.map(p => ({
+    projectId: p.id,
+    projectKey: p.jira_project_key,
+    projectName: p.name,
+    startDate: p.start_date,
+  }));
+}
+
+async function getProjectLastWeekHours(input) {
+	const normalizedInput = String(input || '').trim();
+
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
 	}
 
-	const project = await analyticsRepository.getProjectInfo(normalizedProjectKey);
+	const project = await analyticsRepository.getProjectInfo(normalizedInput);
 	if (!project) {
 		return null;
 	}
 
 	const weekRange = getPreviousWeekRangeInStockholm();
 	const worklogs = await analyticsRepository.getAllWorklogsForForecast({
-		projectKey: normalizedProjectKey,
+		projectKey: normalizedInput,
 		startDate: weekRange.startDateUtc,
 		endDate: weekRange.endDateUtc,
 	});
@@ -296,11 +307,46 @@ async function getWorkloadAnalytics(options = {}) {
 	}
 }
 
+/**
+ * Get all participants in a project.
+ * 
+ * @param {string} projectKey - The Jira project key
+ * @returns {Promise<Object>} Project participants report
+ */
+async function getProjectParticipants(projectKey) {
+	try {
+		const report = await analyticsRepository.getProjectParticipants(projectKey);
+
+		if (!report) {
+			return null;
+		}
+
+		return {
+			projectId: report.projectId,
+			projectKey: report.projectKey,
+			projectName: report.projectName,
+			totalParticipants: report.totalParticipants,
+			participants: report.participants.map(p => ({
+				userId: p.userId,
+				name: p.name,
+				email: p.email,
+				totalSeconds: p.totalSeconds,
+				totalHours: roundToTwoDecimals(p.totalSeconds / 3600),
+			})),
+		};
+	} catch (error) {
+		console.error('Error in getProjectParticipants:', error);
+		throw error;
+	}
+}
+
 module.exports = {
 	getProjectInfo,
 	searchProjects,
+	getAllProjects,
 	getProjectLastWeekHours,
 	getWorkloadForecast,
 	getHistoricalWorkloadComparison,
-	getWorkloadAnalytics
+	getWorkloadAnalytics,
+	getProjectParticipants,
 };

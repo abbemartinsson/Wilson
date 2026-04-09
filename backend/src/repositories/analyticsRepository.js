@@ -7,14 +7,14 @@ const PROJECTS_TABLE = 'PROJECTS';
 const ISSUES_TABLE = 'ISSUES';
 const WORKLOGS_TABLE = 'WORKLOGS';
 
-async function getProjectInfo(projectKey) {
-	const normalizedProjectKey = String(projectKey || '').trim().toUpperCase();
+async function getProjectInfo(input) {
+	const normalizedInput = String(input || '').trim();
 
-	if (!normalizedProjectKey) {
-		throw new Error('projectKey is required');
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
 	}
 
-	const project = await findProjectByKey(normalizedProjectKey);
+	const project = await findProjectByKeyOrName(normalizedInput);
 	if (!project) {
 		return null;
 	}
@@ -43,6 +43,45 @@ async function getProjectInfo(projectKey) {
 		totalSeconds: stats.totalSeconds,
 		contributorsCount: stats.contributorsCount,
 	};
+}
+
+async function findProjectByKeyOrName(input) {
+	const normalizedInput = String(input || '').trim().toUpperCase();
+
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
+	}
+
+	// First try to find by project key
+	const { data: byKey, error: keyError } = await supabase
+		.from(PROJECTS_TABLE)
+		.select('id, jira_project_key, name, start_date, last_logged_issue')
+		.eq('jira_project_key', normalizedInput)
+		.limit(1)
+		.maybeSingle();
+
+	if (keyError) {
+		throw keyError;
+	}
+
+	if (byKey) {
+		return byKey;
+	}
+
+	// If not found by key, try to find by name (case-insensitive)
+	const { data: byName, error: nameError } = await supabase
+		.from(PROJECTS_TABLE)
+		.select('id, jira_project_key, name, start_date, last_logged_issue')
+		.ilike('name', `%${input}%`)
+		.order('name', { ascending: true })
+		.limit(1)
+		.maybeSingle();
+
+	if (nameError) {
+		throw nameError;
+	}
+
+	return byName || null;
 }
 
 async function findProjectByKey(projectKey) {
@@ -172,6 +211,38 @@ async function searchProjects(query) {
 }
 
 /**
+ * Get all projects.
+ * 
+ * @returns {Promise<Array>} Array of all projects
+ */
+async function getAllProjects() {
+  const pageSize = 1000;
+  const projects = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from(PROJECTS_TABLE)
+      .select('id, jira_project_key, name, start_date')
+      .order('name', { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      throw error;
+    }
+
+    const batch = data || [];
+    projects.push(...batch);
+    hasMore = batch.length === pageSize;
+    from += pageSize;
+  }
+
+  return projects;
+}
+
+/**
  * Get all worklogs with user information for forecasting and historical analysis.
  * Optionally filter by date range.
  * 
@@ -198,8 +269,8 @@ async function getAllWorklogsForForecast(options = {}) {
 	
 	// If filtering by project, need to join through issues
 	if (projectKey) {
-		// First get the project
-		const project = await findProjectByKey(projectKey);
+		// First get the project (by key or name)
+		const project = await findProjectByKeyOrName(projectKey);
 		if (!project) {
 			return [];
 		}
@@ -377,10 +448,131 @@ async function getHistoricalComparisonByMonth(month, currentYear, yearsBack = 3)
 	return comparisons;
 }
 
+/**
+ * Get all participants (users) who have worked on a project.
+ * 
+ * @param {string} projectKey - The Jira project key
+ * @returns {Promise<Array>} Array of participants with hours spent
+ */
+async function getProjectParticipants(input) {
+	const normalizedInput = String(input || '').trim();
+
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
+	}
+
+	// Find the project (by key or name)
+	const project = await findProjectByKeyOrName(normalizedInput);
+	if (!project) {
+		return null;
+	}
+
+	// Get all issue IDs for this project
+	const issueIds = await getIssueIdsForProject(project.id);
+	if (issueIds.length === 0) {
+		return {
+			projectId: project.id,
+			projectKey: project.jira_project_key,
+			projectName: project.name,
+			participants: [],
+			totalParticipants: 0,
+		};
+	}
+
+	// Get all unique users who have logged time on these issues
+	const issueIdChunks = chunkArray(issueIds, 200);
+	const participantsMap = new Map(); // user_id -> {user_id, name, email, totalSeconds}
+
+	const USERS_TABLE = 'USERS';
+
+	for (const chunk of issueIdChunks) {
+		const { data, error } = await supabase
+			.from(WORKLOGS_TABLE)
+			.select('user_id, time_spent_seconds')
+			.in('issue_id', chunk);
+
+		if (error) {
+			throw error;
+		}
+
+		const rows = data || [];
+		for (const row of rows) {
+			if (row.user_id) {
+				if (!participantsMap.has(row.user_id)) {
+					participantsMap.set(row.user_id, {
+						user_id: row.user_id,
+						totalSeconds: 0,
+					});
+				}
+
+				const participant = participantsMap.get(row.user_id);
+				participant.totalSeconds += row.time_spent_seconds || 0;
+			}
+		}
+	}
+
+	// Get user details for all participants
+	const userIds = Array.from(participantsMap.keys());
+	if (userIds.length === 0) {
+		return {
+			projectId: project.id,
+			projectKey: project.jira_project_key,
+			projectName: project.name,
+			participants: [],
+			totalParticipants: 0,
+		};
+	}
+
+	// Fetch user details in chunks (Supabase max IN clause size)
+	const userChunks = chunkArray(userIds, 200);
+	const userDetailsMap = new Map();
+
+	for (const chunk of userChunks) {
+		const { data, error } = await supabase
+			.from(USERS_TABLE)
+			.select('id, name, email')
+			.in('id', chunk);
+
+		if (error) {
+			throw error;
+		}
+
+		const rows = data || [];
+		for (const row of rows) {
+			userDetailsMap.set(row.id, row);
+		}
+	}
+
+	// Combine data
+	const participants = [];
+	for (const [userId, participant] of participantsMap.entries()) {
+		const userDetails = userDetailsMap.get(userId);
+		participants.push({
+			userId: userId,
+			name: userDetails?.name || `User ${userId}`,
+			email: userDetails?.email || '',
+			totalSeconds: participant.totalSeconds,
+		});
+	}
+
+	// Sort by hours spent (descending)
+	participants.sort((a, b) => b.totalSeconds - a.totalSeconds);
+
+	return {
+		projectId: project.id,
+		projectKey: project.jira_project_key,
+		projectName: project.name,
+		participants: participants,
+		totalParticipants: participants.length,
+	};
+}
+
 module.exports = {
 	getProjectInfo,
 	searchProjects,
+	getAllProjects,
 	getAllWorklogsForForecast,
 	getWorkloadByPeriod,
 	getHistoricalComparisonByMonth,
+	getProjectParticipants,
 };
