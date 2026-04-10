@@ -20,6 +20,64 @@ let restartTimer = null;
 const conversationStore = new Map();
 const maxConversationMessages = Number.parseInt(process.env.SLACK_ROUTER_MAX_MESSAGES, 10) || 20;
 
+async function getSlackUserProfile(client, slackUserId) {
+  if (!client || !slackUserId) {
+    return null;
+  }
+
+  try {
+    const resp = await client.users.info({ user: slackUserId });
+    const profile = resp?.user?.profile || {};
+
+    return {
+      email: profile.email || null,
+      realName: resp?.user?.real_name || profile.real_name || profile.display_name || null,
+    };
+  } catch (error) {
+    console.warn('Kunde inte hämta Slack-användarprofil:', error.message || error);
+    return null;
+  }
+}
+
+async function persistSlackDmChannel(event, client) {
+  if (!event?.user || !event?.channel) {
+    return;
+  }
+
+  const slackAccountId = String(event.user);
+  const slackDmChannelId = String(event.channel);
+
+  try {
+    const existingUser = await userRepo.findUserBySlackAccountId(slackAccountId);
+
+    if (existingUser) {
+      if (existingUser.slack_dm_channel_id !== slackDmChannelId) {
+        await userRepo.setSlackDmChannelIdBySlackAccountId(slackAccountId, slackDmChannelId);
+      }
+      return;
+    }
+
+    const profile = await getSlackUserProfile(client, slackAccountId);
+    const linkedUser = await userRepo.linkSlackIdentityByEmail({
+      slackAccountId,
+      slackDmChannelId,
+      email: profile?.email,
+    });
+
+    if (linkedUser) {
+      return;
+    }
+
+    await userRepo.upsertSlackUser({
+      slackAccountId,
+      slackDmChannelId,
+      name: profile?.realName || null,
+    });
+  } catch (error) {
+    console.warn('Kunde inte spara slack_dm_channel_id:', error.message || error);
+  }
+}
+
 const app = new App({
   token: process.env.SLACK_BOT_TOKEN,
   signingSecret: process.env.SLACK_SIGNING_SECRET,
@@ -63,6 +121,11 @@ app.event('message', async ({ event, client }) => {
 
     // Bara DM, endast användarmeddelanden, ingen system/subtype-trafik.
     if (!isDmChannel) return;
+    if (event.bot_id || event.subtype) return;
+    if (!event.text) return;
+
+    await persistSlackDmChannel(event, client);
+
     const isThreadMessage = Boolean(event.thread_ts) && event.thread_ts !== event.ts;
 
     const userMessage = event.text;

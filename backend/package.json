@@ -24,7 +24,9 @@
     "report:workload": "node src/scripts/reporting.js workload-forecast",
     "report:workload-forecast": "node src/scripts/reporting.js workload-forecast",
     "report:historical": "node src/scripts/reporting.js historical-comparison",
-    "report:analytics": "node src/scripts/reporting.js workload-analytics"
+    "report:analytics": "node src/scripts/reporting.js workload-analytics",
+    "slack:test-dm": "node src/scripts/sendSlackTestMessage.js",
+    "test": "jest"
   },
   "dependencies": {
     "@slack/bolt": "^3.12.0",

@@ -150,6 +150,7 @@ Representerar användare från Jira.
 | email                  | text        |
 | capacity_hours_per_day | int8        |
 | slack_account_id       | text        |
+| slack_dm_channel_id    | text        |
 | created_at             | timestamptz |
 | updated_at             | timestamptz |
 
