@@ -39,7 +39,7 @@ Boten tar emot DM i Slack, skickar meddelandet till Python chatbot-router, som a
 Hämta data från Jira och Tempo och spara i databasen:
 
 ```bash
-# Daglig synk (issues + worklogs)
+# Daglig synk (users + issues + worklogs)
 npm run sync:daily
 
 # Full synk (allt)

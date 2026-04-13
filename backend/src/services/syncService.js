@@ -9,7 +9,7 @@ const { syncWorklogs } = require('./worklogService');
  */
 async function syncAll() {
   console.log('Starting full sync...');
-  
+
   console.log('  → Syncing projects...');
   const projectsResult = await syncProjects();
   console.log(`    ✓ Synced ${projectsResult ? projectsResult.length : 0} projects`);
@@ -39,8 +39,12 @@ async function syncAll() {
  */
 async function syncDaily() {
   console.log('Starting daily sync...');
-  
-  // Issues and worklogs change frequently, sync them daily
+
+  // Users, issues and worklogs change frequently, sync them daily
+  console.log('  → Syncing users...');
+  const usersResult = await syncUsers();
+  console.log(`    ✓ Synced ${usersResult ? usersResult.length : 0} users`);
+
   console.log('  → Syncing issues...');
   const issuesResult = await syncIssuesAllStatuses();
   console.log(`    ✓ Synced ${issuesResult ? issuesResult.length : 0} issues`);
