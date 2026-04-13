@@ -194,20 +194,20 @@ function chunkArray(values, chunkSize) {
 }
 
 async function searchProjects(query) {
-  const searchPattern = `%${query}%`;
+	const searchPattern = `%${query}%`;
 
-  const { data, error } = await supabase
-    .from(PROJECTS_TABLE)
-    .select('id, jira_project_key, name')
-    .or(`name.ilike.${searchPattern},jira_project_key.ilike.${searchPattern}`)
-    .order('name', { ascending: true })
-    .limit(50);
+	const { data, error } = await supabase
+		.from(PROJECTS_TABLE)
+		.select('id, jira_project_key, name')
+		.or(`name.ilike.${searchPattern},jira_project_key.ilike.${searchPattern}`)
+		.order('name', { ascending: true })
+		.limit(50);
 
-  if (error) {
-    throw error;
-  }
+	if (error) {
+		throw error;
+	}
 
-  return data || [];
+	return data || [];
 }
 
 /**
@@ -216,30 +216,30 @@ async function searchProjects(query) {
  * @returns {Promise<Array>} Array of all projects
  */
 async function getAllProjects() {
-  const pageSize = 1000;
-  const projects = [];
-  let from = 0;
-  let hasMore = true;
+	const pageSize = 1000;
+	const projects = [];
+	let from = 0;
+	let hasMore = true;
 
-  while (hasMore) {
-    const to = from + pageSize - 1;
-    const { data, error } = await supabase
-      .from(PROJECTS_TABLE)
-      .select('id, jira_project_key, name, start_date')
-      .order('name', { ascending: true })
-      .range(from, to);
+	while (hasMore) {
+		const to = from + pageSize - 1;
+		const { data, error } = await supabase
+			.from(PROJECTS_TABLE)
+			.select('id, jira_project_key, name, start_date')
+			.order('name', { ascending: true })
+			.range(from, to);
 
-    if (error) {
-      throw error;
-    }
+		if (error) {
+			throw error;
+		}
 
-    const batch = data || [];
-    projects.push(...batch);
-    hasMore = batch.length === pageSize;
-    from += pageSize;
-  }
+		const batch = data || [];
+		projects.push(...batch);
+		hasMore = batch.length === pageSize;
+		from += pageSize;
+	}
 
-  return projects;
+	return projects;
 }
 
 /**
@@ -250,23 +250,24 @@ async function getAllProjects() {
  * @param {Date} options.startDate - Optional start date filter
  * @param {Date} options.endDate - Optional end date filter
  * @param {string} options.projectKey - Optional project key filter
+ * @param {string|number} options.userId - Optional user filter
  * @returns {Promise<Array>} Array of worklogs with time_spent_seconds, started_at, user_id
  */
 async function getAllWorklogsForForecast(options = {}) {
-	const { startDate, endDate, projectKey } = options;
-	
+	const { startDate, endDate, projectKey, userId } = options;
+
 	let query = supabase
 		.from(WORKLOGS_TABLE)
 		.select('id, time_spent_seconds, started_at, user_id, issue_id');
-	
+
 	if (startDate) {
 		query = query.gte('started_at', startDate.toISOString());
 	}
-	
+
 	if (endDate) {
 		query = query.lte('started_at', endDate.toISOString());
 	}
-	
+
 	// If filtering by project, need to join through issues
 	if (projectKey) {
 		// First get the project (by key or name)
@@ -274,39 +275,43 @@ async function getAllWorklogsForForecast(options = {}) {
 		if (!project) {
 			return [];
 		}
-		
+
 		// Get issue IDs for this project
 		const issueIds = await getIssueIdsForProject(project.id);
 		if (issueIds.length === 0) {
 			return [];
 		}
-		
+
 		// Filter worklogs by these issues
 		query = query.in('issue_id', issueIds);
 	}
-	
+
+	if (userId !== undefined && userId !== null && String(userId).trim() !== '') {
+		query = query.eq('user_id', userId);
+	}
+
 	query = query.order('started_at', { ascending: true });
-	
+
 	// Fetch all data (pagination if needed)
 	const allWorklogs = [];
 	const pageSize = 1000;
 	let from = 0;
 	let hasMore = true;
-	
+
 	while (hasMore) {
 		const to = from + pageSize - 1;
 		const { data, error } = await query.range(from, to);
-		
+
 		if (error) {
 			throw error;
 		}
-		
+
 		const batch = data || [];
 		allWorklogs.push(...batch);
 		hasMore = batch.length === pageSize;
 		from += pageSize;
 	}
-	
+
 	return allWorklogs;
 }
 
@@ -321,10 +326,10 @@ async function getAllWorklogsForForecast(options = {}) {
  */
 async function getWorkloadByPeriod(options = {}) {
 	const { startDate, endDate, groupBy = 'week' } = options;
-	
+
 	// Use raw SQL for better date grouping
 	const truncFunction = groupBy === 'month' ? 'month' : 'week';
-	
+
 	let query = `
 		SELECT 
 			date_trunc('${truncFunction}', started_at) as period_start,
@@ -333,7 +338,7 @@ async function getWorkloadByPeriod(options = {}) {
 			COUNT(*) as worklog_count
 		FROM ${WORKLOGS_TABLE}
 	`;
-	
+
 	const conditions = [];
 	if (startDate) {
 		conditions.push(`started_at >= '${startDate.toISOString()}'`);
@@ -341,23 +346,23 @@ async function getWorkloadByPeriod(options = {}) {
 	if (endDate) {
 		conditions.push(`started_at <= '${endDate.toISOString()}'`);
 	}
-	
+
 	if (conditions.length > 0) {
 		query += ' WHERE ' + conditions.join(' AND ');
 	}
-	
+
 	query += `
 		GROUP BY date_trunc('${truncFunction}', started_at)
 		ORDER BY period_start ASC
 	`;
-	
+
 	const { data, error } = await supabase.rpc('exec_sql', { query });
-	
+
 	if (error) {
 		// If RPC doesn't exist, fall back to fetching all and grouping in JS
 		return getWorkloadByPeriodFallback(options);
 	}
-	
+
 	return data || [];
 }
 
@@ -366,16 +371,16 @@ async function getWorkloadByPeriod(options = {}) {
  */
 async function getWorkloadByPeriodFallback(options = {}) {
 	const { startDate, endDate, groupBy = 'week' } = options;
-	
+
 	const worklogs = await getAllWorklogsForForecast({ startDate, endDate });
-	
+
 	// Group in JavaScript
 	const grouped = {};
-	
+
 	for (const worklog of worklogs) {
 		const date = new Date(worklog.started_at);
 		let periodKey;
-		
+
 		if (groupBy === 'month') {
 			periodKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 		} else {
@@ -385,7 +390,7 @@ async function getWorkloadByPeriodFallback(options = {}) {
 			const monday = new Date(date.setDate(diff));
 			periodKey = monday.toISOString().split('T')[0];
 		}
-		
+
 		if (!grouped[periodKey]) {
 			grouped[periodKey] = {
 				period_start: periodKey,
@@ -394,12 +399,12 @@ async function getWorkloadByPeriodFallback(options = {}) {
 				worklog_count: 0
 			};
 		}
-		
+
 		grouped[periodKey].total_seconds += worklog.time_spent_seconds || 0;
 		grouped[periodKey].active_users.add(worklog.user_id);
 		grouped[periodKey].worklog_count += 1;
 	}
-	
+
 	// Convert to array and format
 	return Object.values(grouped).map(item => ({
 		period_start: item.period_start,
@@ -419,20 +424,20 @@ async function getWorkloadByPeriodFallback(options = {}) {
  */
 async function getHistoricalComparisonByMonth(month, currentYear, yearsBack = 3) {
 	const comparisons = [];
-	
+
 	for (let i = 1; i <= yearsBack; i++) {
 		const year = currentYear - i;
-		
+
 		// Get start and end of month
 		const startDate = new Date(year, month - 1, 1);
 		const endDate = new Date(year, month, 0, 23, 59, 59);
-		
+
 		const worklogs = await getAllWorklogsForForecast({ startDate, endDate });
-		
+
 		if (worklogs.length > 0) {
 			const totalSeconds = worklogs.reduce((sum, w) => sum + (w.time_spent_seconds || 0), 0);
 			const uniqueUsers = new Set(worklogs.map(w => w.user_id)).size;
-			
+
 			comparisons.push({
 				year,
 				month,
@@ -444,7 +449,7 @@ async function getHistoricalComparisonByMonth(month, currentYear, yearsBack = 3)
 			});
 		}
 	}
-	
+
 	return comparisons;
 }
 

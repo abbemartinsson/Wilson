@@ -5,6 +5,11 @@ const config = require('../config').supabase;
 const supabase = createClient(config.url, config.serviceRoleKey);
 
 const TABLE = 'USERS';
+const ACTIVE_REMINDER_MODES = ['monday', 'friday', 'both'];
+
+function selectUserColumns() {
+  return 'id, jira_account_id, name, email, capacity_hours_per_week, slack_account_id, slack_dm_channel_id, timesheet_reminder_mode, last_timesheet_reminder_sent_at, created_at, updated_at';
+}
 
 async function upsertUsers(users) {
   // Transform Jira user objects to our schema
@@ -17,7 +22,7 @@ async function upsertUsers(users) {
     updated_at: now,
     // capacity_hours_per_day and slack_account_id can be added later
   }));
-  
+
   const { data, error } = await supabase
     .from(TABLE)
     .upsert(rows, { onConflict: 'jira_account_id' });
@@ -33,8 +38,23 @@ async function upsertUsers(users) {
 async function findUserBySlackAccountId(slackAccountId) {
   const { data, error } = await supabase
     .from(TABLE)
-    .select('id, slack_account_id, slack_dm_channel_id')
+    .select(selectUserColumns())
     .eq('slack_account_id', slackAccountId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
+async function findUserById(userId) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(selectUserColumns())
+    .eq('id', userId)
     .limit(1)
     .maybeSingle();
 
@@ -53,7 +73,7 @@ async function setSlackDmChannelIdBySlackAccountId(slackAccountId, slackDmChanne
       updated_at: new Date().toISOString(),
     })
     .eq('slack_account_id', slackAccountId)
-    .select('id, slack_account_id, slack_dm_channel_id')
+    .select(selectUserColumns())
     .limit(1)
     .maybeSingle();
 
@@ -77,7 +97,7 @@ async function upsertSlackUser({ slackAccountId, slackDmChannelId, name }) {
   const insertResp = await supabase
     .from(TABLE)
     .insert([row])
-    .select('id, slack_account_id, slack_dm_channel_id')
+    .select(selectUserColumns())
     .limit(1)
     .maybeSingle();
 
@@ -130,7 +150,7 @@ async function linkSlackIdentityByEmail({ slackAccountId, slackDmChannelId, emai
       updated_at: new Date().toISOString(),
     })
     .eq('id', existingUser.id)
-    .select('id, slack_account_id, slack_dm_channel_id')
+    .select(selectUserColumns())
     .limit(1)
     .maybeSingle();
 
@@ -141,10 +161,80 @@ async function linkSlackIdentityByEmail({ slackAccountId, slackDmChannelId, emai
   return data || null;
 }
 
+async function updateTimesheetReminderPreferencesBySlackAccountId(slackAccountId, updates = {}) {
+  const payload = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (updates.timesheetReminderMode !== undefined) {
+    payload.timesheet_reminder_mode = updates.timesheetReminderMode;
+  }
+
+  if (updates.capacityHoursPerWeek !== undefined) {
+    payload.capacity_hours_per_week = updates.capacityHoursPerWeek;
+  }
+
+  if (updates.lastTimesheetReminderSentAt !== undefined) {
+    payload.last_timesheet_reminder_sent_at = updates.lastTimesheetReminderSentAt;
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update(payload)
+    .eq('slack_account_id', slackAccountId)
+    .select(selectUserColumns())
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
+async function updateTimesheetReminderSentAtByUserId(userId, sentAt = new Date().toISOString()) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({
+      last_timesheet_reminder_sent_at: sentAt,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .select(selectUserColumns())
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
+async function listUsersWithTimesheetReminders() {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(selectUserColumns())
+    .in('timesheet_reminder_mode', ACTIVE_REMINDER_MODES)
+    .not('slack_dm_channel_id', 'is', null)
+    .order('name', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
 module.exports = {
   upsertUsers,
   findUserBySlackAccountId,
+  findUserById,
   setSlackDmChannelIdBySlackAccountId,
   upsertSlackUser,
   linkSlackIdentityByEmail,
+  updateTimesheetReminderPreferencesBySlackAccountId,
+  updateTimesheetReminderSentAtByUserId,
+  listUsersWithTimesheetReminders,
 };
