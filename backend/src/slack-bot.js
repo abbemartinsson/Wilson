@@ -16,8 +16,8 @@ const restartDelayMs = Number.parseInt(process.env.SLACK_SOCKET_RESTART_DELAY_MS
 const replyInThread = process.env.SLACK_REPLY_IN_THREAD === 'true';
 const enableDmRouter = process.env.SLACK_ENABLE_DM_ROUTER === 'true';
 const enableTimesheetReminders = process.env.ENABLE_TIMESHEET_REMINDERS === 'true';
-const reminderCheckIntervalMs = Number.parseInt(process.env.TIMESHEET_REMINDER_CHECK_INTERVAL_MS, 10) || 30000;
 const reminderScheduleTime = process.env.TIMESHEET_REMINDER_TIME || timesheetReminderService.DEFAULT_REMINDER_TIME;
+// Note: TIMESHEET_REMINDER_CHECK_INTERVAL_MS is deprecated. Scheduler now intelligently waits until the check window.
 
 let isStarting = false;
 let isRunning = false;
@@ -110,6 +110,72 @@ function getReminderMinuteKey(referenceDate = new Date()) {
   }
 
   return `${mapped.year}-${mapped.month}-${mapped.day} ${mapped.hour}:${mapped.minute}`;
+}
+
+/**
+ * Calculate milliseconds until the reminder check window starts.
+ * Window is Monday/Friday 08:55-09:01.
+ */
+function getMillisecondsUntilNextCheckWindow(referenceDate = new Date()) {
+  const clock = timesheetReminderService.getDateTimePartsInTimeZone(referenceDate, timesheetReminderService.TIME_ZONE);
+  const expected = timesheetReminderService.parseReminderTime(reminderScheduleTime);
+
+  // Window start: 5 minutes before scheduled time
+  const windowStartMinutes = ((expected.hour * 60) + expected.minute) - 5;
+  const windowStartHour = Math.floor(windowStartMinutes / 60);
+  const windowStartMin = windowStartMinutes % 60;
+
+  // Get current weekday
+  let weekday = clock.weekday.toLowerCase();
+  let daysUntilNextWindow = 0;
+
+  if (weekday === 'monday' || weekday === 'friday') {
+    // Today is Mon or Fri, check if window is still ahead
+    const nowMinutes = (clock.hour * 60) + clock.minute;
+    const windowEndMinutes = ((expected.hour * 60) + expected.minute) + 1;
+
+    if (nowMinutes < windowStartMinutes) {
+      // Window hasn't started yet today
+      daysUntilNextWindow = 0;
+    } else if (nowMinutes <= windowEndMinutes) {
+      // We're in the window right now - check again in 1 minute
+      return 60 * 1000;
+    } else {
+      // Window already passed today, schedule for next Mon/Fri
+      daysUntilNextWindow = weekday === 'monday' ? 4 : 3; // Mon->Fri=4 days, Fri->Mon=3 days
+    }
+  } else {
+    // Today is not Mon/Fri, find next Mon or Fri
+    const dayMap = { sunday: 1, tuesday: 6, wednesday: 5, thursday: 4, saturday: 2 };
+    daysUntilNextWindow = dayMap[weekday] || 0;
+  }
+
+  // Build target time in Stockholm timezone
+  const targetDate = new Date(referenceDate.getTime() + (daysUntilNextWindow * 24 * 60 * 60 * 1000));
+  const targetTz = timesheetReminderService.getDateTimePartsInTimeZone(targetDate, timesheetReminderService.TIME_ZONE);
+
+  // Create a date for the target day at window start time
+  const year = targetTz.year;
+  const month = targetTz.month - 1;
+  const day = targetTz.day;
+
+  // Create UTC date by calculating the offset
+  // We need to find what UTC time corresponds to Stockholm time 08:55
+  const testDate = new Date(year, month, day, windowStartHour, windowStartMin, 0);
+  const testFormatted = new Intl.DateTimeFormat('en-CA', {
+    timeZone: timesheetReminderService.TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(testDate);
+
+  const [testYear, testMonth, testDay] = testFormatted.split('-').map(Number);
+  const offset = new Date(testYear, testMonth - 1, testDay).getTime() - new Date(year, month, day).getTime();
+
+  const targetUTC = new Date(testDate.getTime() - offset + (windowStartHour * 60 * 60 * 1000) + (windowStartMin * 60 * 1000));
+  const msUntilWindow = Math.max(60 * 1000, targetUTC.getTime() - referenceDate.getTime());
+
+  return msUntilWindow;
 }
 
 async function startReminderSetup({ channel, client, threadTs, slackUserId }) {
@@ -253,12 +319,13 @@ async function checkScheduledTimesheetReminders() {
   }
 
   const now = new Date();
-  const minuteKey = getReminderMinuteKey(now);
-  if (minuteKey === lastReminderMinuteKey) {
+
+  if (!timesheetReminderService.isWithinReminderCheckWindow(now, reminderScheduleTime)) {
     return;
   }
 
-  if (!timesheetReminderService.isReminderRunDue(now, reminderScheduleTime)) {
+  const minuteKey = getReminderMinuteKey(now);
+  if (minuteKey === lastReminderMinuteKey) {
     return;
   }
 
@@ -287,13 +354,38 @@ function startTimesheetReminderScheduler() {
     return;
   }
 
-  console.log(`Timesheet reminder scheduler started (${timesheetReminderService.TIME_ZONE}, ${reminderScheduleTime}).`);
+  console.log(`Timesheet reminder scheduler started (${timesheetReminderService.TIME_ZONE}, ${reminderScheduleTime}). Checks every minute between 08:55-09:01 on Monday/Friday.`);
 
-  reminderSchedulerTimer = setInterval(() => {
-    void checkScheduledTimesheetReminders();
-  }, reminderCheckIntervalMs);
+  async function scheduleNextCheck() {
+    try {
+      await checkScheduledTimesheetReminders();
+    } catch (error) {
+      console.error('Error in scheduled timesheet check:', error.message || error);
+    }
 
-  void checkScheduledTimesheetReminders();
+    // Calculate delay until next check (within window) or until next window
+    const now = new Date();
+    const isInWindow = timesheetReminderService.isWithinReminderCheckWindow(now, reminderScheduleTime);
+
+    let nextCheckMs;
+    if (isInWindow) {
+      // In window: check every 1 minute
+      nextCheckMs = 60 * 1000;
+    } else {
+      // Not in window: wait until next window starts
+      nextCheckMs = getMillisecondsUntilNextCheckWindow(now) || (60 * 1000);
+    }
+
+    // Add small random jitter to avoid thundering herd
+    nextCheckMs += Math.random() * 5000;
+
+    reminderSchedulerTimer = setTimeout(() => {
+      reminderSchedulerTimer = null;
+      void scheduleNextCheck();
+    }, nextCheckMs);
+  }
+
+  void scheduleNextCheck();
 }
 
 const app = new App({

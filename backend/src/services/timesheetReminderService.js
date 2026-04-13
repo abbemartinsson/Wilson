@@ -183,6 +183,27 @@ function isReminderRunDue(referenceDate = new Date(), reminderTime = DEFAULT_REM
   return isReminderDueToday('both', referenceDate) && nowMinutes >= scheduledMinutes;
 }
 
+/**
+ * Check if current time is within the reminder check window (5 minutes before to 1 minute after 09:00).
+ * Window: 08:55 - 09:01 on Monday or Friday
+ */
+function isWithinReminderCheckWindow(referenceDate = new Date(), reminderTime = DEFAULT_REMINDER_TIME) {
+  // Only check on Monday or Friday
+  if (!isReminderDueToday('both', referenceDate)) {
+    return false;
+  }
+
+  const clock = getDateTimePartsInTimeZone(referenceDate, TIME_ZONE);
+  const expected = parseReminderTime(reminderTime);
+
+  // Calculate window boundaries: (reminderTime - 5 minutes) to (reminderTime + 1 minute)
+  const windowStartMinutes = ((expected.hour * 60) + expected.minute) - 5;
+  const windowEndMinutes = ((expected.hour * 60) + expected.minute) + 1;
+  const nowMinutes = (clock.hour * 60) + clock.minute;
+
+  return nowMinutes >= windowStartMinutes && nowMinutes <= windowEndMinutes;
+}
+
 function getPreviousWeekRangeInStockholm(referenceDate = new Date()) {
   const stockholmToday = getDatePartsInTimeZone(referenceDate, TIME_ZONE);
   const stockholmTodayDate = new Date(Date.UTC(stockholmToday.year, stockholmToday.month - 1, stockholmToday.day));
@@ -526,10 +547,12 @@ module.exports = {
   formatNumber,
   getStockholmDateKey,
   getStockholmWeekday,
+  getDateTimePartsInTimeZone,
   parseReminderTime,
   isReminderModeActive,
   isReminderDueToday,
   isReminderRunDue,
+  isWithinReminderCheckWindow,
   getPreviousWeekRangeInStockholm,
   getCurrentWeekRangeInStockholm,
   getCurrentMonthRangeInStockholm,
