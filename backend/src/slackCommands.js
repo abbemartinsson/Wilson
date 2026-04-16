@@ -247,15 +247,19 @@ function formatProjectList(projects) {
 }
 
 function formatWorkloadForecast(results) {
-  if (!Array.isArray(results)) {
+  const monthlyForecast = Array.isArray(results)
+    ? results
+    : (results?.forecast?.monthly_forecast || results?.monthly_forecast || results?.forecast || []);
+
+  if (!Array.isArray(monthlyForecast)) {
     return formatPlainLinesAsBullets(results);
   }
 
-  if (results.length === 0) {
+  if (monthlyForecast.length === 0) {
     return '• Ingen prognos hittades';
   }
 
-  return results
+  return monthlyForecast
     .map((item) => {
       const month = escapeMrkdwn(item.month || 'okänd månad');
       const predicted = formatNumber(item.predicted_hours ?? 0);
