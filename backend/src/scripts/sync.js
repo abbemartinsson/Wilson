@@ -3,7 +3,7 @@
  * Run with: node src/scripts/sync.js [daily|all|tables|projects|users|issues|issues-all|worklogs|timestamps]
  * 
  * Examples:
- *   node src/scripts/sync.js daily              → Daily sync (issues + worklogs + timestamps)
+ *   node src/scripts/sync.js daily              → Daily sync (users + issues + worklogs + timestamps)
  *   node src/scripts/sync.js all                → Full sync (everything)
  *   node src/scripts/sync.js tables             → Full table sync (projects + users + issues + worklogs + timestamps)
  *   node src/scripts/sync.js projects           → Projects only

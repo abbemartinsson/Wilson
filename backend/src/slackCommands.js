@@ -1,5 +1,6 @@
 const path = require('path');
 const { execFile } = require('child_process');
+const timesheetReminderService = require('./services/timesheetReminderService');
 
 const COMMAND_PREFIX = '!';
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -43,6 +44,22 @@ const commandMap = {
     usage: '!historical [month]',
     inputMode: 'historical-month',
   },
+  'timesheet reminder setup': {
+    customHandler: 'timesheet-reminder-setup',
+    usage: '!timesheet reminder setup',
+  },
+  'timesheet reminder update': {
+    customHandler: 'timesheet-reminder-setup',
+    usage: '!timesheet reminder update',
+  },
+  'timesheet reminder status': {
+    customHandler: 'timesheet-reminder-status',
+    usage: '!timesheet reminder status',
+  },
+  'timesheet hours': {
+    customHandler: 'timesheet-hours',
+    usage: '!timesheet hours',
+  },
 };
 
 const HELP_MESSAGE = [
@@ -55,6 +72,10 @@ const HELP_MESSAGE = [
   '• 📋 !list projects - Lista alla projekt.',
   '• 📈 !workload - Visa prognos för kommande månader.',
   '• 🗓 !historical [month] - Jämför historisk tid för en månad.',
+  '• ⏰ !timesheet reminder setup - Ställ in påminnelser för att logga tid.',
+  '• ✅ !timesheet reminder status - Visa status för påminnelser.',
+  '• ♻️ !timesheet reminder update - Uppdatera påminnelser.',
+  '• 📊 !timesheet hours - Visa loggade timmar för veckan.',
 ].join('\n');
 
 function sanitizeInput(text = '') {
@@ -226,15 +247,19 @@ function formatProjectList(projects) {
 }
 
 function formatWorkloadForecast(results) {
-  if (!Array.isArray(results)) {
+  const monthlyForecast = Array.isArray(results)
+    ? results
+    : (results?.forecast?.monthly_forecast || results?.monthly_forecast || results?.forecast || []);
+
+  if (!Array.isArray(monthlyForecast)) {
     return formatPlainLinesAsBullets(results);
   }
 
-  if (results.length === 0) {
+  if (monthlyForecast.length === 0) {
     return '• Ingen prognos hittades';
   }
 
-  return results
+  return monthlyForecast
     .map((item) => {
       const month = escapeMrkdwn(item.month || 'okänd månad');
       const predicted = formatNumber(item.predicted_hours ?? 0);
@@ -483,27 +508,27 @@ function buildMessagePayload(title, body, isError = false) {
 
 function buildMultiMessagePayload(title, body, isError = false) {
   const safeBody = body && body.trim() ? body.trim() : 'No output.';
-  
+
   // Slack section blocks show ~4 lines before "see more", so split aggressively
   const MAX_LINES_PER_MESSAGE = 5;
   const lines = safeBody.split('\n');
-  
+
   if (lines.length <= MAX_LINES_PER_MESSAGE) {
     // Short content, send as single message
     return [buildMessagePayload(title, body, isError)];
   }
-  
+
   // Long content, split into multiple messages
   const messages = [];
   let currentContent = [];
-  
+
   // First message with title
   for (let i = 0; i < Math.min(MAX_LINES_PER_MESSAGE, lines.length); i++) {
     currentContent.push(lines[i]);
   }
-  
+
   messages.push(buildMessagePayload(title, currentContent.join('\n'), isError));
-  
+
   // Additional messages for remaining content
   for (let i = MAX_LINES_PER_MESSAGE; i < lines.length; i += MAX_LINES_PER_MESSAGE) {
     const chunk = lines.slice(i, Math.min(i + MAX_LINES_PER_MESSAGE, lines.length)).join('\n');
@@ -520,7 +545,7 @@ function buildMultiMessagePayload(title, body, isError = false) {
       ],
     });
   }
-  
+
   return messages;
 }
 
@@ -613,7 +638,15 @@ async function postSlackMessage(client, channel, payload, threadTs) {
   });
 }
 
-async function handleTextCommand({ text, channel, client, logger = console, threadTs }) {
+async function handleTextCommand({
+  text,
+  channel,
+  client,
+  logger = console,
+  threadTs,
+  slackUserId,
+  onTimesheetReminderSetup,
+}) {
   const parsed = parseCommandText(text);
   if (!parsed) {
     logger.info('Non-command text received, suggesting help command', {
@@ -650,6 +683,64 @@ async function handleTextCommand({ text, channel, client, logger = console, thre
     for (const message of messages) {
       await postSlackMessage(client, channel, message, threadTs);
     }
+    return true;
+  }
+
+  if (config.customHandler === 'timesheet-reminder-setup') {
+    if (typeof onTimesheetReminderSetup !== 'function') {
+      const messages = buildMultiMessagePayload(
+        'Timesheet reminder setup',
+        'Reminder setup is not available in this context right now.',
+        true
+      );
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
+      return true;
+    }
+
+    await onTimesheetReminderSetup({
+      text,
+      channel,
+      client,
+      logger,
+      threadTs,
+      slackUserId,
+    });
+    return true;
+  }
+
+  if (config.customHandler === 'timesheet-reminder-status') {
+    if (!slackUserId) {
+      const messages = buildMultiMessagePayload(
+        'Timesheet reminder status',
+        'I could not identify your Slack account.',
+        true
+      );
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
+      return true;
+    }
+
+    const user = await timesheetReminderService.getUserReminderStatusBySlackAccountId(slackUserId);
+    const body = timesheetReminderService.buildReminderStatusMessage(user);
+    await postSlackMessage(client, channel, buildMessagePayload('Timesheet reminder status', body, false), threadTs);
+    return true;
+  }
+
+  if (config.customHandler === 'timesheet-hours') {
+    if (!slackUserId) {
+      const messages = buildMultiMessagePayload('Timesheet overview', 'I could not identify your Slack account.', true);
+      for (const message of messages) {
+        await postSlackMessage(client, channel, message, threadTs);
+      }
+      return true;
+    }
+
+    const summary = await timesheetReminderService.getUserTimesheetSummaryBySlackAccountId(slackUserId);
+    const body = timesheetReminderService.buildCurrentHoursMessage(summary);
+    await postSlackMessage(client, channel, buildMessagePayload('Timesheet overview', body, false), threadTs);
     return true;
   }
 
