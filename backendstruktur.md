@@ -1,435 +1,173 @@
-# Backendstruktur – Datainsamling och prognossystem
+# Backendstruktur – aktuell status
 
-## Syfte
+Det här dokumentet beskriver hur backend-repot ser ut just nu. Det är en inventering av den faktiska strukturen, inte ett förslag på en framtida struktur.
 
-Detta dokument beskriver hur backend-koden bör struktureras för systemet som hämtar data från Jira och Tempo, lagrar den i Supabase och gör den tillgänglig för vidare analys och prognoser.
+## Översikt
 
-Målet är att ha en **tydlig och professionell kodstruktur** som gör systemet lätt att:
+Repot är uppdelat i tre tydliga delar:
 
-* utveckla vidare
-* underhålla
-* felsöka
-* skala upp vid behov
+1. Node.js-backend i `backend/`
+2. Python-del för AI/ML i `backend/python/`
+3. Exempel och experiment i `ML/`
 
-Systemet består huvudsakligen av tre funktionella delar:
+Backendens huvudflöde är:
 
-1. Datainsamling (sync från API:er)
-2. Databasinteraktion
-3. Analys och integrationer (t.ex. Slack)
-
----
-
-# Översikt av backend
-
-Backendens huvuduppgift är att:
-
-1. Hämta data från Jira och Tempo
-2. Transformera datan till rätt format
-3. Spara den i databasen
-4. Göra datan tillgänglig för analys och Slack-kommandon
-
-Översiktligt flöde:
-
-```
+```text
 Jira API
 Tempo API
    │
-   │
    ▼
-API Clients
+Node.js API och Slack-bot
    │
-   ▼
-Services (business logic)
-   │
-   ▼
-Repositories (database layer)
-   │
-   ▼
-Supabase Database
+   ├── clients/         -> anrop mot externa API:er
+   ├── services/        -> affärslogik och orkestrering
+   ├── repositories/    -> databasåtkomst mot Supabase
+   ├── forecasting/     -> rapportering och prognoser
+   └── scripts/         -> körbara CLI-script
 ```
 
----
+## Roten av repot
 
-# Rekommenderad mappstruktur
+I projektroten finns:
 
-```
-backend/
-│
-├── src/
-│
-│   ├── config/
-│   │
-│   ├── clients/
-│   │
-│   ├── services/
-│   │
-│   ├── repositories/
-│   │
-│   ├── jobs/
-│   │
-│   ├── utils/
-│   │
-│   ├── forecasting/
-│   │
-│   ├── slack/
-│   │
-│   └── index
-│
-├── scripts/
-│
-├── tests/
-│
-└── README.md
-```
+- `README.md` - kort projektbeskrivning
+- `instructions.md` - arbetsinstruktioner
+- `backendstruktur.md` - detta dokument
+- `backend/` - själva backend-appen
+- `ML/` - notebook-filer för experiment och test
 
-Varje del har ett tydligt ansvar.
+## `backend/`
 
----
+Det här är huvudappen.
 
-# config
+### Filer på toppnivå
 
-```
-src/config/
-```
+- `package.json` - scripts och beroenden
+- `readme.md` - körinstruktioner och API-beskrivning
+- `node_modules/` - installerade paket
+- `python/` - Python-baserad prognosdel
+- `src/` - Node.js-koden
 
-Denna mapp innehåller konfiguration för hela systemet.
+## `backend/src/`
 
-Exempel:
+Det här är den viktigaste koden i projektet.
 
-* API-nycklar
-* databasanslutning
-* miljövariabler
+### Toppnivåfiler
 
-Exempel på filer:
+- `index.js` - Express-server för reporting API
+- `slack-bot.js` - Slack-bot som svarar på meddelanden och DMer
+- `slackCommands.js` - textkommandon som `!help` och projektkommandon
 
-```
-env
-supabase
-jira
-tempo
-```
+### `src/config/`
 
-Syftet är att **alla externa inställningar ska ligga på ett ställe**.
+Konfiguration och miljöhantering.
 
----
+Filer:
 
-# clients
+- `envtemplate` - mall för miljövariabler
+- `.env` - lokal miljöfil
+- `index.js` - samlar konfigurationsvärden
+- `jira.js` - Jira-konfiguration
+- `supabase.js` - Supabase-konfiguration
+- `tempo.js` - Tempo-konfiguration
+- `README.md` - noteringar om konfigurationen
 
-```
-src/clients/
-```
+### `src/clients/`
 
-Clients ansvarar för att kommunicera med externa API:er.
+HTTP-klienter mot externa tjänster.
 
-Här ska endast kod som gör **HTTP-anrop** finnas.
+Filer:
 
-Exempel på clients:
+- `jiraClient.js` - anrop mot Jira
+- `tempoClient.js` - anrop mot Tempo
 
-```
-jiraClient
-tempoClient
-```
+### `src/services/`
 
-Ansvar:
+Affärslogik och samordning mellan klienter och repositories.
 
-* skicka requests till API:er
-* ta emot svar
-* returnera datan
+Filer:
 
-Clients ska **inte innehålla affärslogik**.
+- `issueService.js` - logik för issues
+- `projectService.js` - logik för projekt
+- `pythonRouterService.js` - skickar data till Python-chatboten
+- `syncService.js` - samordnar synkronisering
+- `userService.js` - logik för användare
+- `worklogService.js` - logik för worklogs
 
-Exempel på vad en client gör:
+### `src/repositories/`
 
-* hämta projekt från Jira
-* hämta issues
-* hämta worklogs från Tempo
+All databasåtkomst ligger här.
 
----
+Filer:
 
-# services
+- `analyticsRepository.js` - analytiska databasfrågor
+- `issueRepository.js` - frågor för issues
+- `projectRepository.js` - frågor för projekt
+- `userRepository.js` - frågor för användare
+- `worklogRepository.js` - frågor för worklogs
 
-```
-src/services/
-```
+### `src/forecasting/`
 
-Services innehåller systemets **affärslogik**.
+Kod för rapporter, analys och prognoser.
 
-De använder:
+Filer:
 
-* clients
-* repositories
+- `analyticsService.js` - analytiska sammanställningar
+- `forecastSerive.js` - prognoslogik för arbetsbelastning
+- `reportingService.js` - tjänster som används av API och Slack
 
-Exempel på services:
+### `src/scripts/`
 
-```
-projectService
-issueService
-worklogService
-syncService
-```
+Körbara script för manuella och schemalagda körningar.
 
-Exempel på ansvar:
+Filer:
 
-* synkronisera projekt
-* synkronisera issues
-* synkronisera worklogs
+- `reporting.js` - CLI för rapporter
+- `sendSlackTestMessage.js` - testar Slack-utskick
+- `sync.js` - kör synkronisering av data
 
-En service kan exempelvis:
+## `backend/python/`
 
-1. hämta issues från Jira
-2. transformera datan
-3. spara den i databasen
+Python-delen används för chatbot-flödet och ML-baserade prognoser.
 
----
+Filer:
 
-# repositories
+- `README.md` - beskrivning av Python-delen
+- `requirements.txt` - Python-beroenden
+- `supabase_chatbot.py` - Python-router/chatbot-flöde
+- `workload_forecast.py` - prognosmodell för arbetsbelastning
 
-```
-src/repositories/
-```
+## `ML/`
 
-Repositories ansvarar för **all databasinteraktion**.
+Här finns notebook-filer för tester och experiment.
 
-All kod som skriver eller läser från databasen ska ligga här.
+Filer:
 
-Exempel på repositories:
+- `test_estimated_task.ipynb`
+- `test_projecthours_prediction.ipynb`
 
-```
-projectRepository
-issueRepository
-userRepository
-worklogRepository
-```
+## Nuvarande körbara delar
 
-Exempel på funktioner:
+Det finns några centrala sätt att köra systemet på just nu:
 
-* insert project
-* update issue
-* upsert worklog
-* fetch project data
+- `npm run api` eller `npm start` - startar reporting API:t
+- `npm run bot` - startar Slack-boten
+- `npm run sync:daily` - kör daglig synk
+- `npm run sync:all` - kör full synk
+- `npm run report:workload` - kör prognosrapport
+- `npm run report:historical` - kör historisk jämförelse
 
-Detta gör att resten av systemet **inte behöver veta hur databasen fungerar**.
+## Viktig notering
 
----
+Det här repot innehåller inte längre en separat `tests/`, `jobs/`, `utils/` eller `slack/`-mapp i `backend/src/`. Slack-funktionerna ligger i stället direkt i `slack-bot.js` och `slackCommands.js`.
 
-# jobs
+## Sammanfattning
 
-```
-src/jobs/
-```
+Den aktuella strukturen är ganska rak:
 
-Jobs ansvarar för **schemalagda uppgifter**.
-
-Här ligger logik som körs automatiskt, exempelvis daglig synkronisering.
-
-Exempel:
-
-```
-dailySyncJob
-```
-
-Denna job ska:
-
-1. starta synkronisering
-2. hämta projekt
-3. hämta användare
-4. hämta issues
-5. hämta worklogs
-
-Jobs kan köras via:
-
-* cron
-* scheduler
-* manuellt script
-
----
-
-# utils
-
-```
-src/utils/
-```
-
-Denna mapp innehåller hjälpfunktioner som används på flera ställen.
-
-Exempel:
-
-```
-logger
-dateHelpers
-apiHelpers
-```
-
-Typiska funktioner:
-
-* loggning
-* datumhantering
-* felhantering
-
----
-
-# forecasting
-
-```
-src/forecasting/
-```
-
-Här ligger kod för analys och prognoser.
-
-Denna del kommer att använda:
-
-* data från databasen
-* Python-modeller
-
-Exempel på funktioner:
-
-* beräkna genomsnittlig projekttid
-* analysera historiska projekt
-* generera prognoser
-
-Denna modul används senare av Slack-boten.
-
----
-
-# slack
-
-```
-src/slack/
-```
-
-Denna mapp innehåller integrationen mot Slack.
-
-Här hanteras:
-
-* slash commands
-* inkommande requests
-* svar till Slack
-
-Exempel:
-
-```
-commandHandlers
-slackClient
-```
-
-Exempel på commands:
-
-```
-/forecast
-/project-hours
-```
-
----
-
-# scripts
-
-```
-scripts/
-```
-
-Scripts används för manuella operationer.
-
-Exempel:
-
-* köra full sync
-* testa API:er
-* migrera data
-
----
-
-# tests
-
-```
-tests/
-```
-
-Denna mapp innehåller tester för systemet.
-
-Exempel:
-
-* test av API clients
-* test av services
-* test av forecasting
-
----
-
-# Rekommenderat dataflöde
-
-När systemet kör den dagliga synkroniseringen sker följande:
-
-1. Job startas
-2. Jira client hämtar projekt
-3. Service bearbetar datan
-4. Repository sparar projekten
-5. Jira client hämtar issues
-6. Repository sparar issues
-7. Tempo client hämtar worklogs
-8. Repository sparar worklogs
-
----
-
-# Daglig synkronisering
-
-Synkroniseringen ska köras **en gång per dag**.
-
-Rekommenderat flöde:
-
-```
-1. sync projects
-2. sync users
-3. sync issues
-4. sync worklogs
-```
-
-Varje steg ska använda **upsert** i databasen för att undvika duplicerade rader.
-
----
-
-# Viktiga principer
-
-Backendkoden ska följa dessa principer:
-
-### Separation of concerns
-
-Varje del av systemet har ett tydligt ansvar:
-
-* clients → externa API:er
-* services → affärslogik
-* repositories → databas
-
----
-
-### Återanvändbar kod
-
-Kod ska delas upp i mindre funktioner som kan återanvändas.
-
----
-
-### Tydlig struktur
-
-Alla utvecklare ska snabbt kunna förstå:
-
-* var kod ligger
-* vad den gör
-* hur systemet fungerar
-
----
-
-# Sammanfattning
-
-Backendstrukturen ska göra systemet:
-
-* stabilt
-* lätt att utveckla vidare
-* lätt att underhålla
-
-Genom att dela upp systemet i:
-
-* clients
-* services
-* repositories
-* jobs
-* forecasting
-* slack
-
-kan varje del utvecklas separat samtidigt som systemet behåller en tydlig struktur.
+- `clients` hämtar data
+- `services` samordnar logiken
+- `repositories` pratar med databasen
+- `forecasting` och `python` hanterar analys och prognoser
+- `scripts` ger CLI-stöd
+- Slack-boten ligger direkt i `backend/src/`
