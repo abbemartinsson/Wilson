@@ -48,13 +48,13 @@ const commandMap = {
 const HELP_MESSAGE = [
   '📚 Available commands:',
   '',
-  '• ❓ !help',
-  '• 📁 !project info <key_or_name>',
-  '• 📆 !project last week <key_or_name>',
-  '• 👥 !project participants <key_or_name>',
-  '• 📋 !list projects',
-  '• 📈 !workload',
-  '• 🗓 !historical [month]',
+  '• ❓ !help - Visa alla tillgängliga kommandon.',
+  '• 📁 !project info <key_or_name> - Visa projektets info och timmar.',
+  '• 📆 !project last week <key_or_name> - Visa timmar för förra veckan.',
+  '• 👥 !project participants <key_or_name> - Visa vilka som jobbat i projektet.',
+  '• 📋 !list projects - Lista alla projekt.',
+  '• 📈 !workload - Visa prognos för kommande månader.',
+  '• 🗓 !historical [month] - Jämför historisk tid för en månad.',
 ].join('\n');
 
 function sanitizeInput(text = '') {
