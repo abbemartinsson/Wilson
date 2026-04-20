@@ -328,6 +328,15 @@ function formatDateOnly(dateString) {
   return String(dateString).split('T')[0];
 }
 
+function formatInlineCode(text) {
+  const safe = String(text ?? '').replace(/`/g, "'");
+  return `\`${safe}\``;
+}
+
+function formatDetailLine(label, value) {
+  return `  - ${formatInlineCode(`${label}: ${value}`)}`;
+}
+
 function formatProjectInfo(report) {
   if (!report || typeof report !== 'object') {
     return formatPlainLinesAsBullets(report);
@@ -356,7 +365,7 @@ function formatProjectLastWeek(report) {
   }
 
   const lines = [
-    `• 📆 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
+    `• ⏱️ ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
     formatDetailLine('Timmar', `${formatNumber(report.totalHours ?? 0)} h`),
   ];
 
@@ -388,7 +397,7 @@ function formatProjectParticipants(report) {
       const name = escapeMrkdwn(participant.name || 'Okänd');
       const hours = formatNumber(participant.totalHours ?? 0);
       const email = participant.email ? ` (${escapeMrkdwn(participant.email)})` : '';
-      lines.push(`    - ${name}${email}: ${hours} h`);
+      lines.push(`    - ${formatInlineCode(`${name}${email}: ${hours} h`)}`);
     }
   }
 
@@ -412,7 +421,7 @@ function formatProjectList(projects) {
   for (const project of projects) {
     const key = escapeMrkdwn(project.projectKey || 'okänd nyckel');
     const name = escapeMrkdwn(project.projectName || 'Okänt projekt');
-    lines.push(`  - ${name} (\`${key}\`)`);
+    lines.push(`  - ${formatInlineCode(`${name} (${key})`)}`);
   }
 
   return lines.join('\n');
@@ -439,8 +448,8 @@ function formatWorkloadForecast(results) {
       const upperBound = formatNumber(item.upper_bound ?? 0);
       return [
         `• 📈 ${month}`,
-        `  - Prognos: ${predicted} h`,
-        `  - Intervall: ${lowerBound}-${upperBound} h`,
+        `  - ${formatInlineCode(`Prognos: ${predicted} h`)}`,
+        `  - ${formatInlineCode(`Intervall: ${lowerBound}-${upperBound} h`)}`,
       ].join('\n');
     })
     .join('\n\n');
@@ -454,7 +463,8 @@ function formatHistoricalComparison(report) {
   const lines = [];
 
   if (report.current_period) {
-    lines.push('  Nuvarande period:');
+    lines.push('  Nuvarande år:');
+    lines.push(`  - ${formatInlineCode(formatNumber(report.current_period.year ?? new Date().getFullYear(), 0))}`);
     lines.push(formatDetailLine('Timmar', `${formatNumber(report.current_period.total_hours ?? 0)} h`));
     lines.push(formatDetailLine('Arbetare', formatNumber(report.current_period.active_users ?? 0)));
     lines.push(formatDetailLine('Worklogs', formatNumber(report.current_period.worklog_count ?? 0)));
@@ -464,9 +474,9 @@ function formatHistoricalComparison(report) {
   if (Array.isArray(report.previous_years) && report.previous_years.length > 0) {
     lines.push('  Tidigare år:');
     for (const yearReport of report.previous_years) {
-      lines.push(`    - ${yearReport.year}`);
-      lines.push(`      Timmar: ${formatNumber(yearReport.total_hours ?? 0)} h`);
-      lines.push(`      Arbetare: ${formatNumber(yearReport.active_users ?? 0)}`);
+      lines.push(`    - ${formatInlineCode(yearReport.year)}`);
+      lines.push(`      - ${formatInlineCode(`Timmar: ${formatNumber(yearReport.total_hours ?? 0)} h`)}`);
+      lines.push(`      - ${formatInlineCode(`Arbetare: ${formatNumber(yearReport.active_users ?? 0)}`)}`);
     }
     lines.push('');
   }
@@ -474,19 +484,19 @@ function formatHistoricalComparison(report) {
   if (report.summary) {
     lines.push('  Sammanfattning:');
     if (report.summary.trend) {
-      lines.push(`    Trend: ${escapeMrkdwn(report.summary.trend)}`);
+      lines.push(`    - ${formatInlineCode(`Trend: ${escapeMrkdwn(report.summary.trend)}`)}`);
     }
     if (report.summary.average_hours_across_years !== undefined) {
-      lines.push(`    Snitt: ${formatNumber(report.summary.average_hours_across_years)} h`);
+      lines.push(`    - ${formatInlineCode(`Snitt: ${formatNumber(report.summary.average_hours_across_years)} h`)}`);
     }
     if (report.summary.max_hours !== undefined) {
-      lines.push(`    Max: ${formatNumber(report.summary.max_hours)} h`);
+      lines.push(`    - ${formatInlineCode(`Max: ${formatNumber(report.summary.max_hours)} h`)}`);
     }
     if (report.summary.min_hours !== undefined) {
-      lines.push(`    Min: ${formatNumber(report.summary.min_hours)} h`);
+      lines.push(`    - ${formatInlineCode(`Min: ${formatNumber(report.summary.min_hours)} h`)}`);
     }
     if (report.summary.years_analyzed !== undefined) {
-      lines.push(`    År analyserade: ${formatNumber(report.summary.years_analyzed)}`);
+      lines.push(`    - ${formatInlineCode(`År analyserade: ${formatNumber(report.summary.years_analyzed)}`)}`);
     }
   }
 
@@ -735,6 +745,26 @@ function buildMultiMessagePayload(title, body, isError = false, options = {}) {
         },
       ],
     });
+  }
+
+  return messages;
+}
+
+function buildSplitPlainMessages(body, options = {}) {
+  const safeBody = body && body.trim() ? body.trim() : 'No output.';
+
+  // Slack section blocks show ~4 lines before "see more", so split aggressively
+  const maxLinesPerMessage = Number.parseInt(options.maxLinesPerMessage, 10) || 4;
+  const lines = safeBody.split('\n');
+
+  if (lines.length <= maxLinesPerMessage) {
+    return [buildPlainMessagePayload(safeBody)];
+  }
+
+  const messages = [];
+  for (let i = 0; i < lines.length; i += maxLinesPerMessage) {
+    const chunk = lines.slice(i, Math.min(i + maxLinesPerMessage, lines.length)).join('\n');
+    messages.push(buildPlainMessagePayload(chunk));
   }
 
   return messages;
@@ -1043,22 +1073,14 @@ async function handleTextCommand({
     const stderr = stderrRaw ? clipText(formatPlainLinesAsBullets(stderrRaw)) : '';
 
     if (stderr) {
-      const messages = buildMultiMessagePayload(
-        `Command completed with warnings: ${COMMAND_PREFIX}${parsed.commandName}`,
-        [stdout, stderr].filter(Boolean).join('\n\n'),
-        false
-      );
+      const messages = buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
       for (const message of messages) {
         await postSlackMessage(client, channel, message, threadTs);
       }
       return true;
     }
 
-    const messages = buildMultiMessagePayload(
-      `Command completed: ${COMMAND_PREFIX}${parsed.commandName}`,
-      stdout,
-      false
-    );
+    const messages = buildSplitPlainMessages(stdout);
     for (const message of messages) {
       await postSlackMessage(client, channel, message, threadTs);
     }
@@ -1071,10 +1093,16 @@ async function handleTextCommand({
       ? `Command timed out after ${COMMAND_TIMEOUT_MS} ms.`
       : 'Command execution failed.';
 
+    const failureMessage =
+      failure?.error?.message ||
+      failure?.message ||
+      (typeof failure === 'string' ? failure : '') ||
+      'unknown error';
+
     logger.error('Text command failed', {
       command: parsed.commandName,
       scriptCommand: config.scriptCommand,
-      message: failure.error?.message || 'unknown error',
+      message: failureMessage,
     });
 
     const messages = buildMultiMessagePayload(
