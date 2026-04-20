@@ -1,6 +1,6 @@
 # Python Machine Learning för Arbetsbelastningsprognoser
 
-Detta system använder en Python-baserad ML-pipeline (NumPy + Pandas) för att träna en modell på historiska worklogs och prediktera timmar framåt.
+Detta system använder en notebook-baserad träningspipeline (scikit-learn) för att exportera en modell som sedan används av Slack-kommandot `!workload`.
 
 ## Installation
 
@@ -30,6 +30,8 @@ pip install -r requirements.txt
 
 - **pandas**: Datahantering och aggregering
 - **numpy**: Numeriska beräkningar och modellträning
+- **scikit-learn**: Modellträning (Ridge + RandomForest)
+- **joblib**: Spara/ladda exporterad modell
 - **python-dateutil**: Datumhantering
 
 ## Hur det fungerar
@@ -52,8 +54,9 @@ Scriptet tar emot JSON-data via stdin:
 
 ### Process
 1. **Data preparation**: Konverterar worklogs till vecko- och månadsdata
-2. **Model training**: Tränar en linjär regressionsmodell (ridge-liknande) i Python
-3. **Forecasting**: Predikterar timmar för kommande månader (default 3)
+2. **Model training (notebook)**: Tränar kandidatmodeller i `ML/workload_model_training.ipynb`
+3. **Model export**: Sparar bästa modell till `backend/python/models/workload_forecast_model.joblib`
+4. **Forecasting runtime**: `backend/python/workload_forecast.py` laddar den exporterade modellen
 4. **Historical comparison**: Jämför med samma period tidigare år
 
 ### Output
@@ -69,7 +72,24 @@ Modellen tränas med:
 - **Lag features**: senaste 4 månadernas utfall
 - **Trend feature**: tidsindex för långsiktig förändring
 - **Säsongsfeatures**: sinus/cosinus för 12-månadersmönster
-- **Regularisering**: stabilare koefficienter via ridge-liknande lösning
+- **Kandidatmodeller**: Ridge och RandomForest
+- **Modellval**: lägst RMSE på tidsserie-validering
+
+## Träna och exportera modell
+
+1. Öppna `ML/workload_model_training.ipynb`
+2. Kör cellerna i ordning
+3. Bekräfta att modellen sparas till:
+
+```text
+backend/python/models/workload_forecast_model.joblib
+```
+
+Valfritt: sätt en egen sökväg med env-var:
+
+```bash
+WORKLOAD_FORECAST_MODEL_PATH=/abs/path/to/workload_forecast_model.joblib
+```
 
 ## Användning från Node.js
 
@@ -96,6 +116,11 @@ const report = await forecastService.getComprehensiveWorkloadForecast({
 - Installera dependencies: `pip install -r requirements.txt`
 - Kontrollera virtual environment är aktiverat
 
+### "Model artifact not found"
+- Träna/exportera modellen i `ML/workload_model_training.ipynb`
+- Kontrollera att filen finns i `backend/python/models/workload_forecast_model.joblib`
+- Eller sätt `WORKLOAD_FORECAST_MODEL_PATH` till rätt fil
+
 ### "Insufficient data for forecasting"
 - Modellen kräver minst 8 månaders data för säkra prognoser
 - Synkronisera mer historisk data från Jira/Tempo
@@ -106,9 +131,9 @@ const report = await forecastService.getComprehensiveWorkloadForecast({
 
 ## Prestandatips
 
-- Första körningen tränar modellen direkt från historiska data
+- Träna om modellen manuellt när datamönster ändras
 - Mer historisk data = bättre prognoser
-- Minst 3-6 månaders historik rekommenderas
+- Minst 6-12 månaders historik rekommenderas
 
 ## Framtida förbättringar
 

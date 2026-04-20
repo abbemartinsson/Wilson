@@ -5,3 +5,4 @@ backend/src/config/.env
 backend/python/__pycache__
 __pycache__/
 *.pyc
+backend/python/models/
