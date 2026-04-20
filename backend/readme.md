@@ -32,6 +32,30 @@ npm run bot
 
 Boten tar emot DM i Slack, skickar meddelandet till Python chatbot-router, som anropar Node Reporting API samt Python forecast-pipeline och returnerar svaret till Slack.
 
+### Rollstyrning av Slack-kommandon
+
+Slack-kommandon kan nu styras per användare via kolumnen `slack_role` i tabellen `USERS`.
+Användare kopplas till rätt rad via `slack_account_id`.
+
+Standardroller i koden:
+- `admin` - alla kommandon
+- `member` - nästan alla kommandon `!help`
+
+Om ingen roll finns, eller om rollen är okänd, används `member`.
+
+Lägg till kolumn i Supabase (SQL Editor):
+kolumn heter slack_role med enum value role: admin eller member
+
+Exempel på uppdatering av roll för en användare:
+
+```sql
+update "USERS"
+set slack_role = 'admin'
+where slack_account_id = 'U0123456789';
+```
+
+`!help` visar bara de kommandon som den aktuella användaren har tillgång till.
+
 ---
 
 ### Synkronisering

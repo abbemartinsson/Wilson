@@ -329,10 +329,10 @@ function buildReminderStatusMessage(user) {
   }
 
   return [
-    '*Timesheet reminder status*',
-    `• Mode: ${formatReminderMode(user.timesheet_reminder_mode)}`,
-    `• Weekly target: ${formatTargetHours(user)}`,
-    `• Last reminder sent: ${formatFriendlyDateTime(user.last_timesheet_reminder_sent_at)}`,
+    `• ⏰ Timesheet reminder status`,
+    `  - Mode: ${formatReminderMode(user.timesheet_reminder_mode)}`,
+    `  - Weekly target: ${formatTargetHours(user)}`,
+    `  - Last reminder sent: ${formatFriendlyDateTime(user.last_timesheet_reminder_sent_at)}`,
   ].join('\n');
 }
 
@@ -342,12 +342,12 @@ function buildCurrentHoursMessage(summary) {
   }
 
   return [
-    '*Timesheet overview*',
-    `• This week: ${formatNumber(summary.weekHoursToDate)}h logged`,
-    `• This month: ${formatNumber(summary.monthHoursToDate)}h logged`,
+    `• 📊 Timesheet overview`,
+    `  - This week: ${formatNumber(summary.weekHoursToDate)}h logged`,
+    `  - This month: ${formatNumber(summary.monthHoursToDate)}h logged`,
     summary.targetHours !== null && summary.targetHours !== undefined
-      ? `• Weekly target: ${formatNumber(summary.targetHours)}h`
-      : '• Weekly target: not set',
+      ? `  - Weekly target: ${formatNumber(summary.targetHours)}h`
+      : '  - Weekly target: not set',
   ].join('\n');
 }
 

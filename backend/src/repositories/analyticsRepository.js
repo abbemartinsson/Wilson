@@ -216,6 +216,10 @@ async function searchProjects(query) {
  * @returns {Promise<Array>} Array of all projects
  */
 async function getAllProjects() {
+	const cutoffDate = new Date();
+	cutoffDate.setMonth(cutoffDate.getMonth() - 2);
+	const cutoffIso = cutoffDate.toISOString();
+
 	const pageSize = 1000;
 	const projects = [];
 	let from = 0;
@@ -225,7 +229,9 @@ async function getAllProjects() {
 		const to = from + pageSize - 1;
 		const { data, error } = await supabase
 			.from(PROJECTS_TABLE)
-			.select('id, jira_project_key, name, start_date')
+			.select('id, jira_project_key, name, start_date, last_logged_issue')
+			.not('last_logged_issue', 'is', null)
+			.gte('last_logged_issue', cutoffIso)
 			.order('name', { ascending: true })
 			.range(from, to);
 

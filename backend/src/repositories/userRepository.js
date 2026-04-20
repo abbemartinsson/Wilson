@@ -6,6 +6,8 @@ const supabase = createClient(config.url, config.serviceRoleKey);
 
 const TABLE = 'USERS';
 const ACTIVE_REMINDER_MODES = ['monday', 'friday', 'both'];
+const DEFAULT_USER_ROLE = 'member';
+const ROLE_COLUMN = 'slack_role';
 
 function selectUserColumns() {
   return 'id, jira_account_id, name, email, capacity_hours_per_week, slack_account_id, slack_dm_channel_id, timesheet_reminder_mode, last_timesheet_reminder_sent_at, created_at, updated_at';
@@ -227,6 +229,35 @@ async function listUsersWithTimesheetReminders() {
   return data || [];
 }
 
+function isMissingRoleColumnError(error) {
+  const message = String(error?.message || '').toLowerCase();
+  return message.includes('column') && message.includes(ROLE_COLUMN);
+}
+
+async function findRoleBySlackAccountId(slackAccountId) {
+  if (!slackAccountId) {
+    return DEFAULT_USER_ROLE;
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(`${ROLE_COLUMN}`)
+    .eq('slack_account_id', slackAccountId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    if (isMissingRoleColumnError(error)) {
+      return DEFAULT_USER_ROLE;
+    }
+
+    throw error;
+  }
+
+  const role = String(data?.[ROLE_COLUMN] || '').trim().toLowerCase();
+  return role || DEFAULT_USER_ROLE;
+}
+
 module.exports = {
   upsertUsers,
   findUserBySlackAccountId,
@@ -237,4 +268,6 @@ module.exports = {
   updateTimesheetReminderPreferencesBySlackAccountId,
   updateTimesheetReminderSentAtByUserId,
   listUsersWithTimesheetReminders,
+  findRoleBySlackAccountId,
+  DEFAULT_USER_ROLE,
 };

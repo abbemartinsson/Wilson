@@ -1,6 +1,7 @@
 const path = require('path');
 const { execFile } = require('child_process');
 const timesheetReminderService = require('./services/timesheetReminderService');
+const userRepository = require('./repositories/userRepository');
 
 const COMMAND_PREFIX = '!';
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -62,21 +63,193 @@ const commandMap = {
   },
 };
 
-const HELP_MESSAGE = [
-  '📚 Available commands:',
-  '',
-  '• ❓ !help - Visa alla tillgängliga kommandon.',
-  '• 📁 !project info <key_or_name> - Visa projektets info och timmar.',
-  '• 📆 !project last week <key_or_name> - Visa timmar för förra veckan.',
-  '• 👥 !project participants <key_or_name> - Visa vilka som jobbat i projektet.',
-  '• 📋 !list projects - Lista alla projekt.',
-  '• 📈 !workload - Visa prognos för kommande månader.',
-  '• 🗓 !historical [month] - Jämför historisk tid för en månad.',
-  '• ⏰ !timesheet reminder setup - Ställ in påminnelser för att logga tid.',
-  '• ✅ !timesheet reminder status - Visa status för påminnelser.',
-  '• ♻️ !timesheet reminder update - Uppdatera påminnelser.',
-  '• 📊 !timesheet hours - Visa loggade timmar för veckan.',
-].join('\n');
+const ALL_COMMAND_NAMES = Object.keys(commandMap);
+
+// Edit this config when you want to move commands between roles.
+// - all: true   => role gets every command in commandMap
+// - commands: [] => role gets only listed command names
+const ROLE_PERMISSION_CONFIG = {
+  admin: { all: true },
+  member: {
+    commands: [
+      'help',
+      'project info',
+      'project last week',
+      'list projects',
+      'workload',
+      'project participants',
+      'historical',
+      'timesheet reminder setup',
+      'timesheet reminder update',
+      'timesheet reminder status',
+      'timesheet hours',
+    ],
+  },
+  // Example for future roles:
+  // manager: {
+  //   commands: ['help', 'list projects', 'historical'],
+  // },
+};
+
+function buildRoleCommands(permissionConfig) {
+  const allCommandsSet = new Set(ALL_COMMAND_NAMES);
+  const result = {};
+
+  for (const [roleName, roleConfig] of Object.entries(permissionConfig)) {
+    if (roleConfig?.all === true) {
+      result[roleName] = [...ALL_COMMAND_NAMES];
+      continue;
+    }
+
+    const configuredCommands = Array.isArray(roleConfig?.commands) ? roleConfig.commands : [];
+    const invalidCommandNames = configuredCommands.filter((commandName) => !allCommandsSet.has(commandName));
+
+    if (invalidCommandNames.length > 0) {
+      throw new Error(
+        `Invalid command(s) in ROLE_PERMISSION_CONFIG for role "${roleName}": ${invalidCommandNames.join(', ')}`
+      );
+    }
+
+    result[roleName] = [...configuredCommands];
+  }
+
+  return result;
+}
+
+const ROLE_COMMANDS = buildRoleCommands(ROLE_PERMISSION_CONFIG);
+
+const ROLE_LABELS = {
+  admin: 'Admin',
+  member: 'Medlem',
+};
+
+const COMMAND_HELP_TEXT = {
+  help: '❓ !help - Visa alla tillgängliga kommandon.',
+  'project info': '📁 !project info <key_or_name> - Visa projektets info och timmar.',
+  'project last week': '📆 !project last week <key_or_name> - Visa timmar för förra veckan.',
+  'project participants': '👥 !project participants <key_or_name> - Visa vilka som jobbat i projektet.',
+  'list projects': '📋 !list projects - Lista alla projekt.',
+  workload: '📈 !workload [months 1-12] - Visa prognos för kommande månader.',
+  historical: '🗓 !historical [month] - Jämför historisk tid för en månad.',
+  'timesheet reminder setup': '⏰ !timesheet reminder setup - Ställ in logg reminder.',
+  'timesheet reminder status': '✅ !timesheet reminder status - Visa status för logg reminder.',
+  'timesheet reminder update': '♻️ !timesheet reminder update - Uppdatera logg reminder.',
+  'timesheet hours': '📊 !timesheet hours - Visa loggade timmar för veckan.',
+};
+
+const COMMAND_USAGE_TEXT = {
+  help: '!help',
+  'project info': '!project info <key_or_name>',
+  'project last week': '!project last week <key_or_name>',
+  'project participants': '!project participants <key_or_name>',
+  'list projects': '!list projects',
+  workload: '!workload [months 1-12]',
+  historical: '!historical [month]',
+  'timesheet reminder setup': '!timesheet reminder setup',
+  'timesheet reminder update': '!timesheet reminder update',
+  'timesheet reminder status': '!timesheet reminder status',
+  'timesheet hours': '!timesheet hours',
+};
+
+const HELP_COMMAND_GROUPS = [
+  {
+    title: 'Projekt',
+    emoji: '📁',
+    commands: ['project info', 'project last week', 'project participants', 'list projects'],
+  },
+  {
+    title: 'Prognos och historik',
+    emoji: '📈',
+    commands: ['workload', 'historical'],
+  },
+  {
+    title: 'Timesheet',
+    emoji: '⏰',
+    commands: ['timesheet reminder setup', 'timesheet reminder update', 'timesheet reminder status', 'timesheet hours'],
+  },
+];
+
+function normalizeUserRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  if (!normalized || !ROLE_COMMANDS[normalized]) {
+    return userRepository.DEFAULT_USER_ROLE;
+  }
+
+  return normalized;
+}
+
+async function resolveUserRole(slackUserId, logger = console) {
+  try {
+    const role = await userRepository.findRoleBySlackAccountId(slackUserId);
+    return normalizeUserRole(role);
+  } catch (error) {
+    logger.warn('Could not resolve user role, defaulting to member', {
+      slackUserId,
+      message: error.message || error,
+    });
+    return userRepository.DEFAULT_USER_ROLE;
+  }
+}
+
+function getAllowedCommandsForRole(role) {
+  const normalizedRole = normalizeUserRole(role);
+  return ROLE_COMMANDS[normalizedRole] || ROLE_COMMANDS[userRepository.DEFAULT_USER_ROLE];
+}
+
+function canUseCommand(role, commandName) {
+  return getAllowedCommandsForRole(role).includes(commandName);
+}
+
+function buildHelpMessageForRole(role) {
+  const normalizedRole = normalizeUserRole(role);
+  const roleLabel = ROLE_LABELS[normalizedRole] || normalizedRole;
+  const allowedCommands = getAllowedCommandsForRole(normalizedRole);
+  const allowedSet = new Set(allowedCommands);
+  const usedCommandNames = new Set();
+  const helpLines = [`📚 Tillgängliga kommandon för roll: *${roleLabel}*`, ''];
+
+  if (allowedSet.has('help')) {
+    helpLines.push('• ❓ *Hjälp:*');
+    helpLines.push(`   - \`${COMMAND_USAGE_TEXT.help}\``);
+    helpLines.push('');
+  }
+
+  for (const group of HELP_COMMAND_GROUPS) {
+    const visibleCommands = group.commands.filter((commandName) => allowedSet.has(commandName));
+    if (visibleCommands.length === 0) {
+      continue;
+    }
+
+    visibleCommands.forEach((commandName) => usedCommandNames.add(commandName));
+    helpLines.push(`• ${group.emoji} *${group.title}:*`);
+    for (const commandName of visibleCommands) {
+      const usage = COMMAND_USAGE_TEXT[commandName] || commandMap[commandName]?.usage || commandName;
+      helpLines.push(`   - \`${usage}\``);
+    }
+
+    helpLines.push('');
+  }
+
+  const ungroupedCommands = allowedCommands.filter(
+    (commandName) => commandName !== 'help' && !usedCommandNames.has(commandName)
+  );
+
+  if (ungroupedCommands.length > 0) {
+    helpLines.push('• 🧩 *Övrigt:*');
+    for (const commandName of ungroupedCommands) {
+      const usage = COMMAND_USAGE_TEXT[commandName] || commandMap[commandName]?.usage || commandName;
+      helpLines.push(`   - \`${usage}\``);
+    }
+
+    helpLines.push('');
+  }
+
+  while (helpLines.length > 0 && helpLines[helpLines.length - 1] === '') {
+    helpLines.pop();
+  }
+
+  return helpLines.join('\n');
+}
 
 function sanitizeInput(text = '') {
   return String(text)
@@ -161,21 +334,20 @@ function formatProjectInfo(report) {
   }
 
   const lines = [
-    `📁 ${escapeMrkdwn(report.projectName || 'Okänt projekt')}`,
-    `🔑 ${escapeMrkdwn(report.projectKey || 'Okänd nyckel')}`,
-    `🕐 ${formatNumber(report.totalHours ?? 0)} timmar`,
-    `🧍 ${formatNumber(report.contributorsCount ?? 0)} arbetare`,
+    `• 📁 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'Okänd nyckel')})`,
+    formatDetailLine('Timmar totalt', `${formatNumber(report.totalHours ?? 0)} h`),
+    formatDetailLine('Arbetare', formatNumber(report.contributorsCount ?? 0)),
   ];
 
   if (report.startDate) {
-    lines.push(`📅 Start: ${escapeMrkdwn(formatDateOnly(report.startDate))}`);
+    lines.push(formatDetailLine('Startdatum', escapeMrkdwn(formatDateOnly(report.startDate))));
   }
 
   if (report.lastLoggedIssue) {
-    lines.push(`🕒 Senaste logg: ${escapeMrkdwn(formatDateOnly(report.lastLoggedIssue))}`);
+    lines.push(formatDetailLine('Senaste logg', escapeMrkdwn(formatDateOnly(report.lastLoggedIssue))));
   }
 
-  return lines.map((line) => `• ${line}`).join('\n');
+  return lines.join('\n');
 }
 
 function formatProjectLastWeek(report) {
@@ -184,19 +356,19 @@ function formatProjectLastWeek(report) {
   }
 
   const lines = [
-    `📁 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
-    `🕐 ${formatNumber(report.totalHours ?? 0)} timmar`,
+    `• 📆 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
+    formatDetailLine('Timmar', `${formatNumber(report.totalHours ?? 0)} h`),
   ];
 
   if (report.formattedDuration) {
-    lines.push(`⏱ ${escapeMrkdwn(report.formattedDuration)}`);
+    lines.push(formatDetailLine('Tid', escapeMrkdwn(report.formattedDuration)));
   }
 
   if (report.period?.label) {
-    lines.push(`📅 ${escapeMrkdwn(report.period.label)}`);
+    lines.push(formatDetailLine('Period', escapeMrkdwn(report.period.label)));
   }
 
-  return lines.map((line) => `• ${line}`).join('\n');
+  return lines.join('\n');
 }
 
 function formatProjectParticipants(report) {
@@ -205,22 +377,22 @@ function formatProjectParticipants(report) {
   }
 
   const lines = [
-    `📁 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
-    `👥 ${formatNumber(report.totalParticipants ?? 0)} deltagare`,
+    `• 👥 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
+    formatDetailLine('Antal deltagare', formatNumber(report.totalParticipants ?? 0)),
   ];
 
   if (Array.isArray(report.participants) && report.participants.length > 0) {
     lines.push('');
-    lines.push('*Deltagare:*');
+    lines.push('  Deltagare:');
     for (const participant of report.participants) {
       const name = escapeMrkdwn(participant.name || 'Okänd');
       const hours = formatNumber(participant.totalHours ?? 0);
       const email = participant.email ? ` (${escapeMrkdwn(participant.email)})` : '';
-      lines.push(`• ${name}${email} — 🕐 ${hours} timmar`);
+      lines.push(`    - ${name}${email}: ${hours} h`);
     }
   }
 
-  return lines.map((line) => `${line}`).join('\n');
+  return lines.join('\n');
 }
 
 function formatProjectList(projects) {
@@ -229,18 +401,18 @@ function formatProjectList(projects) {
   }
 
   if (projects.length === 0) {
-    return '• Inga projekt hittades';
+    return '• 📋 Aktiva projekt\n  Inga projekt hittades';
   }
 
   const lines = [
-    `📋 *Projekt* — ${projects.length} totalt`,
+    `• 📋 Aktiva projekt (${projects.length} totalt)`,
     '',
   ];
 
   for (const project of projects) {
     const key = escapeMrkdwn(project.projectKey || 'okänd nyckel');
     const name = escapeMrkdwn(project.projectName || 'Okänt projekt');
-    lines.push(`• \`${key}\` — ${name}`);
+    lines.push(`  - ${name} (\`${key}\`)`);
   }
 
   return lines.join('\n');
@@ -256,7 +428,7 @@ function formatWorkloadForecast(results) {
   }
 
   if (monthlyForecast.length === 0) {
-    return '• Ingen prognos hittades';
+    return '• 📈 Prognos\n  Ingen prognos hittades';
   }
 
   return monthlyForecast
@@ -265,9 +437,13 @@ function formatWorkloadForecast(results) {
       const predicted = formatNumber(item.predicted_hours ?? 0);
       const lowerBound = formatNumber(item.lower_bound ?? 0);
       const upperBound = formatNumber(item.upper_bound ?? 0);
-      return `• ${month} — 🕐 ${predicted} timmar (${lowerBound}–${upperBound})`;
+      return [
+        `• 📈 ${month}`,
+        `  - Prognos: ${predicted} h`,
+        `  - Intervall: ${lowerBound}-${upperBound} h`,
+      ].join('\n');
     })
-    .join('\n');
+    .join('\n\n');
 }
 
 function formatHistoricalComparison(report) {
@@ -278,41 +454,39 @@ function formatHistoricalComparison(report) {
   const lines = [];
 
   if (report.current_period) {
-    lines.push('*Nuvarande period*');
-    lines.push(`• 🕐 ${formatNumber(report.current_period.total_hours ?? 0)} timmar`);
-    lines.push(`• 🧍 ${formatNumber(report.current_period.active_users ?? 0)} arbetare`);
-    lines.push(`• 📄 ${formatNumber(report.current_period.worklog_count ?? 0)} worklogs`);
+    lines.push('  Nuvarande period:');
+    lines.push(formatDetailLine('Timmar', `${formatNumber(report.current_period.total_hours ?? 0)} h`));
+    lines.push(formatDetailLine('Arbetare', formatNumber(report.current_period.active_users ?? 0)));
+    lines.push(formatDetailLine('Worklogs', formatNumber(report.current_period.worklog_count ?? 0)));
     lines.push('');
   }
 
   if (Array.isArray(report.previous_years) && report.previous_years.length > 0) {
-    lines.push('*Tidigare år*');
+    lines.push('  Tidigare år:');
     for (const yearReport of report.previous_years) {
-      lines.push(
-        `• ${yearReport.year}: 🕐 ${formatNumber(yearReport.total_hours ?? 0)} timmar, 🧍 ${formatNumber(
-          yearReport.active_users ?? 0
-        )} arbetare`
-      );
+      lines.push(`    - ${yearReport.year}`);
+      lines.push(`      Timmar: ${formatNumber(yearReport.total_hours ?? 0)} h`);
+      lines.push(`      Arbetare: ${formatNumber(yearReport.active_users ?? 0)}`);
     }
     lines.push('');
   }
 
   if (report.summary) {
-    lines.push('*Sammanfattning*');
+    lines.push('  Sammanfattning:');
     if (report.summary.trend) {
-      lines.push(`• Trend: ${escapeMrkdwn(report.summary.trend)}`);
+      lines.push(`    Trend: ${escapeMrkdwn(report.summary.trend)}`);
     }
     if (report.summary.average_hours_across_years !== undefined) {
-      lines.push(`• Snitt: ${formatNumber(report.summary.average_hours_across_years)} timmar`);
+      lines.push(`    Snitt: ${formatNumber(report.summary.average_hours_across_years)} h`);
     }
     if (report.summary.max_hours !== undefined) {
-      lines.push(`• Max: ${formatNumber(report.summary.max_hours)} timmar`);
+      lines.push(`    Max: ${formatNumber(report.summary.max_hours)} h`);
     }
     if (report.summary.min_hours !== undefined) {
-      lines.push(`• Min: ${formatNumber(report.summary.min_hours)} timmar`);
+      lines.push(`    Min: ${formatNumber(report.summary.min_hours)} h`);
     }
     if (report.summary.years_analyzed !== undefined) {
-      lines.push(`• År analyserade: ${formatNumber(report.summary.years_analyzed)}`);
+      lines.push(`    År analyserade: ${formatNumber(report.summary.years_analyzed)}`);
     }
   }
 
@@ -506,14 +680,31 @@ function buildMessagePayload(title, body, isError = false) {
   };
 }
 
-function buildMultiMessagePayload(title, body, isError = false) {
+function buildPlainMessagePayload(body) {
+  const safeBody = body && body.trim() ? body.trim() : 'No output.';
+
+  return {
+    text: safeBody,
+    blocks: [
+      {
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: safeBody,
+        },
+      },
+    ],
+  };
+}
+
+function buildMultiMessagePayload(title, body, isError = false, options = {}) {
   const safeBody = body && body.trim() ? body.trim() : 'No output.';
 
   // Slack section blocks show ~4 lines before "see more", so split aggressively
-  const MAX_LINES_PER_MESSAGE = 5;
+  const maxLinesPerMessage = Number.parseInt(options.maxLinesPerMessage, 10) || 4;
   const lines = safeBody.split('\n');
 
-  if (lines.length <= MAX_LINES_PER_MESSAGE) {
+  if (lines.length <= maxLinesPerMessage) {
     // Short content, send as single message
     return [buildMessagePayload(title, body, isError)];
   }
@@ -523,15 +714,15 @@ function buildMultiMessagePayload(title, body, isError = false) {
   let currentContent = [];
 
   // First message with title
-  for (let i = 0; i < Math.min(MAX_LINES_PER_MESSAGE, lines.length); i++) {
+  for (let i = 0; i < Math.min(maxLinesPerMessage, lines.length); i++) {
     currentContent.push(lines[i]);
   }
 
   messages.push(buildMessagePayload(title, currentContent.join('\n'), isError));
 
   // Additional messages for remaining content
-  for (let i = MAX_LINES_PER_MESSAGE; i < lines.length; i += MAX_LINES_PER_MESSAGE) {
-    const chunk = lines.slice(i, Math.min(i + MAX_LINES_PER_MESSAGE, lines.length)).join('\n');
+  for (let i = maxLinesPerMessage; i < lines.length; i += maxLinesPerMessage) {
+    const chunk = lines.slice(i, Math.min(i + maxLinesPerMessage, lines.length)).join('\n');
     messages.push({
       text: chunk,
       blocks: [
@@ -662,6 +853,9 @@ async function handleTextCommand({
     return true;
   }
 
+  const userRole = await resolveUserRole(slackUserId, logger);
+  const roleAwareHelpMessage = buildHelpMessageForRole(userRole);
+
   const config = commandMap[parsed.commandName];
   if (!config) {
     logger.warn('Unknown text command received', {
@@ -669,7 +863,25 @@ async function handleTextCommand({
       text: sanitizeInput(text),
     });
 
-    const messages = buildMultiMessagePayload('Unknown command', HELP_MESSAGE, true);
+    const messages = buildMultiMessagePayload('Unknown command', roleAwareHelpMessage, true);
+    for (const message of messages) {
+      await postSlackMessage(client, channel, message, threadTs);
+    }
+    return true;
+  }
+
+  if (!canUseCommand(userRole, parsed.commandName)) {
+    logger.warn('User attempted command without permission', {
+      commandName: parsed.commandName,
+      slackUserId,
+      userRole,
+    });
+
+    const messages = buildMultiMessagePayload(
+      'Access denied',
+      `Du har inte behörighet för ${COMMAND_PREFIX}${parsed.commandName}.\n\n${roleAwareHelpMessage}`,
+      true
+    );
     for (const message of messages) {
       await postSlackMessage(client, channel, message, threadTs);
     }
@@ -679,7 +891,13 @@ async function handleTextCommand({
   if (parsed.commandName === 'help') {
     logger.info('Showing help for text command', { command: parsed.commandName });
 
-    const messages = buildMultiMessagePayload('Help', HELP_MESSAGE, false);
+    const helpSections = roleAwareHelpMessage
+      .split('\n\n')
+      .map((section) => section.trim())
+      .filter(Boolean);
+
+    const messages = helpSections.map((section) => buildPlainMessagePayload(section));
+
     for (const message of messages) {
       await postSlackMessage(client, channel, message, threadTs);
     }
@@ -748,7 +966,7 @@ async function handleTextCommand({
   let scriptArgument = inputText || undefined;
 
   if (config.requiresText && !inputText) {
-    const messages = buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${HELP_MESSAGE}`, true);
+    const messages = buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${roleAwareHelpMessage}`, true);
     for (const message of messages) {
       await postSlackMessage(client, channel, message, threadTs);
     }
@@ -761,7 +979,7 @@ async function handleTextCommand({
     if (!resolvedProject) {
       const messages = buildMultiMessagePayload(
         'Project not found',
-        `No project matched "${inputText}".\n\n${HELP_MESSAGE}`,
+        `No project matched "${inputText}".\n\n${roleAwareHelpMessage}`,
         true
       );
       for (const message of messages) {
@@ -774,7 +992,7 @@ async function handleTextCommand({
       const options = formatProjectOptions(resolvedProject.candidates);
       const messages = buildMultiMessagePayload(
         'Multiple projects matched',
-        `Please be more specific. I found these matches for "${inputText}":\n${options}\n\n${HELP_MESSAGE}`,
+        `Please be more specific. I found these matches for "${inputText}":\n${options}\n\n${roleAwareHelpMessage}`,
         true
       );
       for (const message of messages) {
@@ -789,7 +1007,7 @@ async function handleTextCommand({
   if (config.inputMode === 'optional-months') {
     const parsedMonths = parseOptionalMonths(inputText);
     if (!parsedMonths.ok) {
-      const messages = buildMultiMessagePayload('Invalid input', `Usage: ${config.usage}\n${parsedMonths.message}\n\n${HELP_MESSAGE}`, true);
+      const messages = buildMultiMessagePayload('Invalid input', `Usage: ${config.usage}\n${parsedMonths.message}\n\n${roleAwareHelpMessage}`, true);
       for (const message of messages) {
         await postSlackMessage(client, channel, message, threadTs);
       }
@@ -802,7 +1020,7 @@ async function handleTextCommand({
   if (config.inputMode === 'historical-month') {
     const parsedMonth = parseHistoricalMonth(inputText);
     if (!parsedMonth.ok) {
-      const messages = buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${HELP_MESSAGE}`, true);
+      const messages = buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${roleAwareHelpMessage}`, true);
       for (const message of messages) {
         await postSlackMessage(client, channel, message, threadTs);
       }
@@ -861,7 +1079,7 @@ async function handleTextCommand({
 
     const messages = buildMultiMessagePayload(
       `Command failed: ${COMMAND_PREFIX}${parsed.commandName}`,
-      [timeoutText, stderr || stdout || 'No error output.', '', HELP_MESSAGE].join('\n'),
+      [timeoutText, stderr || stdout || 'No error output.', '', roleAwareHelpMessage].join('\n'),
       true
     );
     for (const message of messages) {
