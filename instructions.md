@@ -311,8 +311,8 @@ Exempel:
 ```
 !project info HULTP
 !project search hulta
-!workload 3
-!historical 3
+!forecast 3
+!history 3
 ```
 
 Utöver kommandon kan boten även skicka vanliga frågor vidare till Python-router för AI-svar.

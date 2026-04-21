@@ -23,43 +23,43 @@ const commandMap = {
     requiresText: true,
     usage: '!project last week <project_key_or_name>',
   },
-  'project participants': {
+  'project team': {
     scriptCommand: 'project-participants',
     requiresText: true,
-    usage: '!project participants <project_key_or_name>',
+    usage: '!project team <project_key_or_name>',
   },
-  'list projects': {
+  projects: {
     scriptCommand: 'list-projects',
     requiresText: false,
-    usage: '!list projects',
+    usage: '!projects',
   },
-  workload: {
+  forecast: {
     scriptCommand: 'workload-forecast',
     requiresText: false,
-    usage: '!workload [months 1-12]',
+    usage: '!forecast [months 1-12]',
     inputMode: 'optional-months',
   },
-  historical: {
+  history: {
     scriptCommand: 'historical-comparison',
     requiresText: false,
-    usage: '!historical [month]',
+    usage: '!history [month]',
     inputMode: 'historical-month',
   },
-  'timesheet reminder setup': {
+  'reminder setup': {
     customHandler: 'timesheet-reminder-setup',
-    usage: '!timesheet reminder setup',
+    usage: '!reminder setup',
   },
-  'timesheet reminder update': {
+  'reminder update': {
     customHandler: 'timesheet-reminder-setup',
-    usage: '!timesheet reminder update',
+    usage: '!reminder update',
   },
-  'timesheet reminder status': {
+  'reminder status': {
     customHandler: 'timesheet-reminder-status',
-    usage: '!timesheet reminder status',
+    usage: '!reminder status',
   },
-  'timesheet hours': {
+  'reminder hours': {
     customHandler: 'timesheet-hours',
-    usage: '!timesheet hours',
+    usage: '!reminder hours',
   },
 };
 
@@ -75,19 +75,19 @@ const ROLE_PERMISSION_CONFIG = {
       'help',
       'project info',
       'project last week',
-      'list projects',
-      'workload',
-      'project participants',
-      'historical',
-      'timesheet reminder setup',
-      'timesheet reminder update',
-      'timesheet reminder status',
-      'timesheet hours',
+      'projects',
+      'forecast',
+      'project team',
+      'history',
+      'reminder setup',
+      'reminder update',
+      'reminder status',
+      'reminder hours',
     ],
   },
   // Example for future roles:
   // manager: {
-  //   commands: ['help', 'list projects', 'historical'],
+  //   commands: ['help', 'projects', 'history'],
   // },
 };
 
@@ -127,45 +127,59 @@ const COMMAND_HELP_TEXT = {
   help: '❓ !help - Visa alla tillgängliga kommandon.',
   'project info': '📁 !project info <key_or_name> - Visa projektets info och timmar.',
   'project last week': '📆 !project last week <key_or_name> - Visa timmar för förra veckan.',
-  'project participants': '👥 !project participants <key_or_name> - Visa vilka som jobbat i projektet.',
-  'list projects': '📋 !list projects - Lista alla projekt.',
-  workload: '📈 !workload [months 1-12] - Visa prognos för kommande månader.',
-  historical: '🗓 !historical [month] - Jämför historisk tid för en månad.',
-  'timesheet reminder setup': '⏰ !timesheet reminder setup - Ställ in logg reminder.',
-  'timesheet reminder status': '✅ !timesheet reminder status - Visa status för logg reminder.',
-  'timesheet reminder update': '♻️ !timesheet reminder update - Uppdatera logg reminder.',
-  'timesheet hours': '📊 !timesheet hours - Visa loggade timmar för veckan.',
+  'project team': '👥 !project team <key_or_name> - Visa vilka som jobbat i projektet.',
+  projects: '📋 !projects - Lista alla projekt.',
+  forecast: '📈 !forecast [months 1-12] - Visa prognos för kommande månader.',
+  history: '🗓 !history [month] - Jämför historisk tid för en månad.',
+  'reminder setup': '⏰ !reminder setup - Ställ in logg reminder.',
+  'reminder status': '✅ !reminder status - Visa status för logg reminder.',
+  'reminder update': '♻️ !reminder update - Uppdatera logg reminder.',
+  'reminder hours': '📊 !reminder hours - Visa loggade timmar för veckan.',
 };
 
 const COMMAND_USAGE_TEXT = {
   help: '!help',
   'project info': '!project info <key_or_name>',
   'project last week': '!project last week <key_or_name>',
-  'project participants': '!project participants <key_or_name>',
-  'list projects': '!list projects',
-  workload: '!workload [months 1-12]',
-  historical: '!historical [month]',
-  'timesheet reminder setup': '!timesheet reminder setup',
-  'timesheet reminder update': '!timesheet reminder update',
-  'timesheet reminder status': '!timesheet reminder status',
-  'timesheet hours': '!timesheet hours',
+  'project team': '!project team <key_or_name>',
+  projects: '!projects',
+  forecast: '!forecast [months 1-12]',
+  history: '!history [month]',
+  'reminder setup': '!reminder setup',
+  'reminder update': '!reminder update',
+  'reminder status': '!reminder status',
+  'reminder hours': '!reminder hours',
+};
+
+const COMMAND_SHORT_DESCRIPTIONS = {
+  help: 'Visar alla kommandon.',
+  'project info': 'Visar projektets data.',
+  'project last week': 'Visar timmar förra veckan.',
+  'project team': 'Visar vilka som jobbat.',
+  projects: 'Listar alla projekt.',
+  forecast: 'Visar prognos framåt.',
+  history: 'Jämför med tidigare år.',
+  'reminder setup': 'Ställer in reminder.',
+  'reminder update': 'Uppdaterar reminder.',
+  'reminder status': 'Visar reminder-status.',
+  'reminder hours': 'Visar dina timmar.',
 };
 
 const HELP_COMMAND_GROUPS = [
   {
     title: 'Projekt',
     emoji: '📁',
-    commands: ['project info', 'project last week', 'project participants', 'list projects'],
+    commands: ['project info', 'project last week', 'project team', 'projects'],
   },
   {
     title: 'Prognos och historik',
     emoji: '📈',
-    commands: ['workload', 'historical'],
+    commands: ['forecast', 'history'],
   },
   {
-    title: 'Timesheet',
+    title: 'Reminder',
     emoji: '⏰',
-    commands: ['timesheet reminder setup', 'timesheet reminder update', 'timesheet reminder status', 'timesheet hours'],
+    commands: ['reminder setup', 'reminder update', 'reminder status', 'reminder hours'],
   },
 ];
 
@@ -210,7 +224,7 @@ function buildHelpMessageForRole(role) {
 
   if (allowedSet.has('help')) {
     helpLines.push('• ❓ *Hjälp:*');
-    helpLines.push(`   - \`${COMMAND_USAGE_TEXT.help}\``);
+    helpLines.push(`   - \`${COMMAND_USAGE_TEXT.help}\` - ${COMMAND_SHORT_DESCRIPTIONS.help}`);
     helpLines.push('');
   }
 
@@ -224,7 +238,8 @@ function buildHelpMessageForRole(role) {
     helpLines.push(`• ${group.emoji} *${group.title}:*`);
     for (const commandName of visibleCommands) {
       const usage = COMMAND_USAGE_TEXT[commandName] || commandMap[commandName]?.usage || commandName;
-      helpLines.push(`   - \`${usage}\``);
+      const shortDescription = COMMAND_SHORT_DESCRIPTIONS[commandName] || 'Ingen beskrivning.';
+      helpLines.push(`   - \`${usage}\` - ${shortDescription}`);
     }
 
     helpLines.push('');
@@ -238,7 +253,8 @@ function buildHelpMessageForRole(role) {
     helpLines.push('• 🧩 *Övrigt:*');
     for (const commandName of ungroupedCommands) {
       const usage = COMMAND_USAGE_TEXT[commandName] || commandMap[commandName]?.usage || commandName;
-      helpLines.push(`   - \`${usage}\``);
+      const shortDescription = COMMAND_SHORT_DESCRIPTIONS[commandName] || 'Ingen beskrivning.';
+      helpLines.push(`   - \`${usage}\` - ${shortDescription}`);
     }
 
     helpLines.push('');
@@ -518,19 +534,19 @@ function formatCommandOutput(commandName, rawOutput) {
     return formatProjectLastWeek(parsedOutput);
   }
 
-  if (commandName === 'project participants') {
+  if (commandName === 'project team') {
     return formatProjectParticipants(parsedOutput);
   }
 
-  if (commandName === 'list projects') {
+  if (commandName === 'projects') {
     return formatProjectList(parsedOutput);
   }
 
-  if (commandName === 'workload') {
+  if (commandName === 'forecast') {
     return formatWorkloadForecast(parsedOutput);
   }
 
-  if (commandName === 'historical') {
+  if (commandName === 'history') {
     return formatHistoricalComparison(parsedOutput);
   }
 
@@ -937,7 +953,7 @@ async function handleTextCommand({
   if (config.customHandler === 'timesheet-reminder-setup') {
     if (typeof onTimesheetReminderSetup !== 'function') {
       const messages = buildMultiMessagePayload(
-        'Timesheet reminder setup',
+        'Reminder setup',
         'Reminder setup is not available in this context right now.',
         true
       );
@@ -961,7 +977,7 @@ async function handleTextCommand({
   if (config.customHandler === 'timesheet-reminder-status') {
     if (!slackUserId) {
       const messages = buildMultiMessagePayload(
-        'Timesheet reminder status',
+        'Reminder status',
         'I could not identify your Slack account.',
         true
       );
@@ -973,13 +989,13 @@ async function handleTextCommand({
 
     const user = await timesheetReminderService.getUserReminderStatusBySlackAccountId(slackUserId);
     const body = timesheetReminderService.buildReminderStatusMessage(user);
-    await postSlackMessage(client, channel, buildMessagePayload('Timesheet reminder status', body, false), threadTs);
+    await postSlackMessage(client, channel, buildMessagePayload('Reminder status', body, false), threadTs);
     return true;
   }
 
   if (config.customHandler === 'timesheet-hours') {
     if (!slackUserId) {
-      const messages = buildMultiMessagePayload('Timesheet overview', 'I could not identify your Slack account.', true);
+      const messages = buildMultiMessagePayload('Reminder overview', 'I could not identify your Slack account.', true);
       for (const message of messages) {
         await postSlackMessage(client, channel, message, threadTs);
       }
@@ -988,7 +1004,7 @@ async function handleTextCommand({
 
     const summary = await timesheetReminderService.getUserTimesheetSummaryBySlackAccountId(slackUserId);
     const body = timesheetReminderService.buildCurrentHoursMessage(summary);
-    await postSlackMessage(client, channel, buildMessagePayload('Timesheet overview', body, false), threadTs);
+    await postSlackMessage(client, channel, buildMessagePayload('Reminder overview', body, false), threadTs);
     return true;
   }
 

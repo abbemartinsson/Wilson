@@ -329,7 +329,7 @@ function buildReminderStatusMessage(user) {
   }
 
   return [
-    `• ⏰ Timesheet reminder status`,
+    `• ⏰ Reminder status`,
     `  - Mode: ${formatReminderMode(user.timesheet_reminder_mode)}`,
     `  - Weekly target: ${formatTargetHours(user)}`,
     `  - Last reminder sent: ${formatFriendlyDateTime(user.last_timesheet_reminder_sent_at)}`,
@@ -342,7 +342,7 @@ function buildCurrentHoursMessage(summary) {
   }
 
   return [
-    `• 📊 Timesheet overview`,
+    `• 📊 Reminder overview`,
     `  - This week: ${formatNumber(summary.weekHoursToDate)}h logged`,
     `  - This month: ${formatNumber(summary.monthHoursToDate)}h logged`,
     summary.targetHours !== null && summary.targetHours !== undefined
