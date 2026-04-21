@@ -9,7 +9,7 @@ dotenv.config();
 const { askPythonRouter } = require('./services/pythonRouterService');
 const userRepo = require('./repositories/userRepository');
 const timesheetReminderService = require('./services/timesheetReminderService');
-const { handleTextCommand } = require('./slackCommands');
+const { handleTextCommand, handlePendingUserCostSetup } = require('./slackCommands');
 
 const useSocketMode = process.env.SLACK_SOCKET_MODE !== 'false';
 const restartDelayMs = Number.parseInt(process.env.SLACK_SOCKET_RESTART_DELAY_MS, 10) || 3000;
@@ -412,6 +412,9 @@ app.event('message', async ({ event, client }) => {
     if (isDmChannel) {
       const handledReminderSetup = await handlePendingReminderSetup(event, client);
       if (handledReminderSetup) return;
+
+      const handledUserCostSetup = await handlePendingUserCostSetup(event, client);
+      if (handledUserCostSetup) return;
     }
 
     const handledCommand = await handleTextCommand({

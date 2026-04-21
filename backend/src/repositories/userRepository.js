@@ -10,7 +10,16 @@ const DEFAULT_USER_ROLE = 'member';
 const ROLE_COLUMN = 'slack_role';
 
 function selectUserColumns() {
-  return 'id, jira_account_id, name, email, capacity_hours_per_week, slack_account_id, slack_dm_channel_id, timesheet_reminder_mode, last_timesheet_reminder_sent_at, created_at, updated_at';
+  return 'id, jira_account_id, name, email, cost, capacity_hours_per_week, slack_account_id, slack_dm_channel_id, timesheet_reminder_mode, last_timesheet_reminder_sent_at, created_at, updated_at';
+}
+
+function getFirstName(name) {
+  const normalizedName = String(name || '').trim().replace(/\s+/g, ' ');
+  if (!normalizedName) {
+    return '';
+  }
+
+  return normalizedName.split(' ')[0].toLowerCase();
 }
 
 async function upsertUsers(users) {
@@ -65,6 +74,26 @@ async function findUserById(userId) {
   }
 
   return data || null;
+}
+
+async function findUsersByFirstName(firstName) {
+  const normalizedFirstName = String(firstName || '').trim().toLowerCase();
+
+  if (!normalizedFirstName) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(selectUserColumns())
+    .order('name', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  const users = data || [];
+  return users.filter((user) => getFirstName(user.name) === normalizedFirstName);
 }
 
 async function setSlackDmChannelIdBySlackAccountId(slackAccountId, slackDmChannelId) {
@@ -229,6 +258,25 @@ async function listUsersWithTimesheetReminders() {
   return data || [];
 }
 
+async function updateUserCostById(userId, cost) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update({
+      cost,
+      updated_at: new Date().toISOString(),
+    })
+    .eq('id', userId)
+    .select(selectUserColumns())
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
 function isMissingRoleColumnError(error) {
   const message = String(error?.message || '').toLowerCase();
   return message.includes('column') && message.includes(ROLE_COLUMN);
@@ -262,11 +310,13 @@ module.exports = {
   upsertUsers,
   findUserBySlackAccountId,
   findUserById,
+  findUsersByFirstName,
   setSlackDmChannelIdBySlackAccountId,
   upsertSlackUser,
   linkSlackIdentityByEmail,
   updateTimesheetReminderPreferencesBySlackAccountId,
   updateTimesheetReminderSentAtByUserId,
+  updateUserCostById,
   listUsersWithTimesheetReminders,
   findRoleBySlackAccountId,
   DEFAULT_USER_ROLE,

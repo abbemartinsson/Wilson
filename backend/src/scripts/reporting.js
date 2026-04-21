@@ -57,6 +57,25 @@ async function main() {
       process.exit(0);
     }
 
+    if (command === 'project-cost') {
+      const projectInput = process.argv[3];
+
+      if (!projectInput) {
+        console.error('Missing project key or name. Usage: npm run report:project-cost <PROJECT_KEY_OR_NAME>');
+        process.exit(1);
+      }
+
+      const report = await reportingService.getProjectCost(projectInput);
+
+      if (!report) {
+        console.error(`No project found matching: ${projectInput}`);
+        process.exit(1);
+      }
+
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(0);
+    }
+
     if (command === 'project-last-week-hours') {
       const projectInput = process.argv[3];
 
@@ -150,6 +169,7 @@ async function main() {
     console.error('  get-project-info <PROJECT_KEY_OR_NAME>');
     console.error('  project-last-week-hours <PROJECT_KEY_OR_NAME>');
     console.error('  project-participants <PROJECT_KEY_OR_NAME>');
+    console.error('  project-cost <PROJECT_KEY_OR_NAME>');
     console.error('  list-projects');
     console.error('  workload-forecast [MONTHS]');
     console.error('  historical-comparison [MONTH] [YEAR] [YEARS_BACK]');

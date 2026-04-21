@@ -23,6 +23,41 @@ async function getProjectInfo(projectKey) {
 	};
 }
 
+async function getProjectCost(projectKey) {
+	const report = await analyticsRepository.getProjectCostReport(projectKey);
+
+	if (!report) {
+		return null;
+	}
+
+	return {
+		projectId: report.projectId,
+		projectKey: report.projectKey,
+		projectName: report.projectName,
+		totalSeconds: report.totalSeconds,
+		totalHours: roundToTwoDecimals(report.totalSeconds / 3600),
+		totalCost: roundToTwoDecimals(report.totalCost),
+		participantCount: report.totalParticipants,
+		participants: report.participants.map((participant) => ({
+			userId: participant.userId,
+			name: participant.name,
+			email: participant.email,
+			totalSeconds: participant.totalSeconds,
+			totalHours: roundToTwoDecimals(participant.totalHours),
+			costPerHour: participant.costPerHour,
+			totalCost: participant.totalCost,
+		})),
+		missingCostUsers: report.missingCostUsers.map((user) => ({
+			userId: user.userId,
+			name: user.name,
+			email: user.email,
+			totalSeconds: user.totalSeconds,
+			totalHours: roundToTwoDecimals(user.totalHours),
+		})),
+		missingCostCount: report.missingCostCount,
+	};
+}
+
 function roundToTwoDecimals(value) {
 	return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -342,6 +377,7 @@ async function getProjectParticipants(projectKey) {
 
 module.exports = {
 	getProjectInfo,
+	getProjectCost,
 	searchProjects,
 	getAllProjects,
 	getProjectLastWeekHours,

@@ -20,6 +20,7 @@
     "reporting": "node src/scripts/reporting.js",
     "report:get-project-info": "node src/scripts/reporting.js get-project-info",
     "report:project-last-week-hours": "node src/scripts/reporting.js project-last-week-hours",
+    "report:project-cost": "node src/scripts/reporting.js project-cost",
     "report:search-projects": "node src/scripts/reporting.js search-projects",
     "report:workload": "node src/scripts/reporting.js workload-forecast",
     "report:workload-forecast": "node src/scripts/reporting.js workload-forecast",

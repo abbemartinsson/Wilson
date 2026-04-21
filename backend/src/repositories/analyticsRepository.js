@@ -7,6 +7,10 @@ const PROJECTS_TABLE = 'PROJECTS';
 const ISSUES_TABLE = 'ISSUES';
 const WORKLOGS_TABLE = 'WORKLOGS';
 
+function roundToTwoDecimals(value) {
+	return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
 async function getProjectInfo(input) {
 	const normalizedInput = String(input || '').trim();
 
@@ -578,6 +582,146 @@ async function getProjectParticipants(input) {
 	};
 }
 
+async function getProjectCostReport(input) {
+	const normalizedInput = String(input || '').trim();
+
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
+	}
+
+	const project = await findProjectByKeyOrName(normalizedInput);
+	if (!project) {
+		return null;
+	}
+
+	const issueIds = await getIssueIdsForProject(project.id);
+	if (issueIds.length === 0) {
+		return {
+			projectId: project.id,
+			projectKey: project.jira_project_key,
+			projectName: project.name,
+			totalSeconds: 0,
+			totalCost: 0,
+			participants: [],
+			totalParticipants: 0,
+			missingCostUsers: [],
+			missingCostCount: 0,
+		};
+	}
+
+	const issueIdChunks = chunkArray(issueIds, 200);
+	const participantsMap = new Map();
+
+	for (const chunk of issueIdChunks) {
+		const { data, error } = await supabase
+			.from(WORKLOGS_TABLE)
+			.select('user_id, time_spent_seconds')
+			.in('issue_id', chunk);
+
+		if (error) {
+			throw error;
+		}
+
+		const rows = data || [];
+		for (const row of rows) {
+			if (!row.user_id) {
+				continue;
+			}
+
+			if (!participantsMap.has(row.user_id)) {
+				participantsMap.set(row.user_id, {
+					userId: row.user_id,
+					totalSeconds: 0,
+				});
+			}
+
+			const participant = participantsMap.get(row.user_id);
+			participant.totalSeconds += row.time_spent_seconds || 0;
+		}
+	}
+
+	const userIds = Array.from(participantsMap.keys());
+	const userDetailsMap = new Map();
+
+	for (const chunk of chunkArray(userIds, 200)) {
+		if (chunk.length === 0) {
+			continue;
+		}
+
+		const { data, error } = await supabase
+			.from('USERS')
+			.select('id, name, email, cost')
+			.in('id', chunk);
+
+		if (error) {
+			throw error;
+		}
+
+		const rows = data || [];
+		for (const row of rows) {
+			userDetailsMap.set(row.id, row);
+		}
+	}
+
+	const participants = [];
+	const missingCostUsers = [];
+	let totalSeconds = 0;
+	let totalCost = 0;
+
+	for (const [userId, participant] of participantsMap.entries()) {
+		const userDetails = userDetailsMap.get(userId);
+		const hours = participant.totalSeconds / 3600;
+		const rawCostPerHour = userDetails?.cost;
+		const costPerHour = rawCostPerHour === null || rawCostPerHour === undefined || rawCostPerHour === ''
+			? null
+			: Number(rawCostPerHour);
+		const hasCost = Number.isFinite(costPerHour);
+		const userTotalCost = hasCost ? hours * costPerHour : null;
+
+		totalSeconds += participant.totalSeconds;
+		if (hasCost) {
+			totalCost += userTotalCost;
+		} else {
+			missingCostUsers.push({
+				userId,
+				name: userDetails?.name || `User ${userId}`,
+				email: userDetails?.email || '',
+				totalSeconds: participant.totalSeconds,
+				totalHours: roundToTwoDecimals(hours),
+			});
+		}
+
+		participants.push({
+			userId,
+			name: userDetails?.name || `User ${userId}`,
+			email: userDetails?.email || '',
+			totalSeconds: participant.totalSeconds,
+			totalHours: roundToTwoDecimals(hours),
+			costPerHour: hasCost ? roundToTwoDecimals(costPerHour) : null,
+			totalCost: hasCost ? roundToTwoDecimals(userTotalCost) : null,
+		});
+	}
+
+	participants.sort((left, right) => {
+		const leftCost = Number.isFinite(left.totalCost) ? left.totalCost : -1;
+		const rightCost = Number.isFinite(right.totalCost) ? right.totalCost : -1;
+		return rightCost - leftCost;
+	});
+
+	return {
+		projectId: project.id,
+		projectKey: project.jira_project_key,
+		projectName: project.name,
+		totalSeconds,
+		totalHours: roundToTwoDecimals(totalSeconds / 3600),
+		totalCost: roundToTwoDecimals(totalCost),
+		participants,
+		totalParticipants: participants.length,
+		missingCostUsers,
+		missingCostCount: missingCostUsers.length,
+	};
+}
+
 module.exports = {
 	getProjectInfo,
 	searchProjects,
@@ -586,4 +730,5 @@ module.exports = {
 	getWorkloadByPeriod,
 	getHistoricalComparisonByMonth,
 	getProjectParticipants,
+	getProjectCostReport,
 };

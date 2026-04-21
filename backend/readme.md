@@ -46,6 +46,14 @@ Om ingen roll finns, eller om rollen är okänd, används `member`.
 Lägg till kolumn i Supabase (SQL Editor):
 kolumn heter slack_role med enum value role: admin eller member
 
+Admin kan också sätta en users kostnad per timme med ett interaktivt kommando:
+
+```text
+!user cost <förnamn>
+```
+
+Om flera users har samma förnamn listar boten alla träffar och du får välja rätt person innan du anger beloppet i kr/timme.
+
 Exempel på uppdatering av roll för en användare:
 
 ```sql

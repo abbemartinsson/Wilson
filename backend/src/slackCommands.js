@@ -23,6 +23,16 @@ const commandMap = {
     requiresText: true,
     usage: '!project last week <project_key_or_name>',
   },
+  'project cost': {
+    scriptCommand: 'project-cost',
+    requiresText: true,
+    usage: '!project cost <project_key_or_name>',
+  },
+  'user cost': {
+    customHandler: 'user-cost-setup',
+    requiresText: true,
+    usage: '!user cost <förnamn>',
+  },
   'project team': {
     scriptCommand: 'project-participants',
     requiresText: true,
@@ -127,6 +137,8 @@ const COMMAND_USAGE_TEXT = {
   help: '!help',
   'project info': '!project info <key_or_name>',
   'project last week': '!project last week <key_or_name>',
+  'project cost': '!project cost <key_or_name>',
+  'user cost': '!user cost <förnamn>',
   'project team': '!project team <key_or_name>',
   projects: '!projects',
   forecast: '!forecast [months 1-12]',
@@ -141,6 +153,8 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   help: 'Visar alla kommandon.',
   'project info': 'Visar projektets data.',
   'project last week': 'Visar timmar förra veckan.',
+  'project cost': 'Visar projektets totalkostnad.',
+  'user cost': 'Sätter en users kostnad per timme.',
   'project team': 'Visar vilka som jobbat.',
   projects: 'Listar alla aktiva projekt.',
   forecast: 'Visar prognos framåt.',
@@ -167,7 +181,14 @@ const HELP_COMMAND_GROUPS = [
     emoji: '⏰',
     commands: ['reminder setup', 'reminder update', 'reminder status', 'reminder hours'],
   },
+  {
+    title: 'Admin',
+    emoji: '🛠️',
+    commands: ['project cost', 'user cost'],
+  },
 ];
+
+const userCostSetupStore = new Map();
 
 function normalizeUserRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
@@ -287,6 +308,201 @@ function formatNumber(value, decimals = 2) {
   return numericValue.toFixed(decimals).replace(/\.0+$/, '').replace(/(\.\d*[1-9])0+$/, '$1');
 }
 
+function formatCurrency(value) {
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) {
+    return String(value);
+  }
+
+  return `${new Intl.NumberFormat('sv-SE', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numericValue)} kr`;
+}
+
+function formatUserCostValue(value) {
+  const numericValue = Number(value);
+  if (Number.isNaN(numericValue)) {
+    return 'okänd';
+  }
+
+  return `${formatCurrency(numericValue)}/timme`;
+}
+
+function parseCostInput(inputText) {
+  const normalized = String(inputText || '')
+    .trim()
+    .toLowerCase()
+    .replace(/kr\s*\/\s*timme|kr\s*\/\s*h|kr\/timme|kr\/h|kr/g, '')
+    .replace(/\s+/g, '');
+
+  if (!normalized) {
+    return { ok: false, message: 'Skriv ett belopp i kr/timme.' };
+  }
+
+  if (!/^-?\d+(?:[.,]\d+)?$/.test(normalized)) {
+    return { ok: false, message: 'Jag kunde inte läsa beloppet. Skriv ett tal, till exempel 350 eller 350,50.' };
+  }
+
+  const value = Number.parseFloat(normalized.replace(',', '.'));
+  if (!Number.isFinite(value) || value <= 0) {
+    return { ok: false, message: 'Beloppet måste vara ett tal större än 0.' };
+  }
+
+  return { ok: true, value: Math.round(value * 100) / 100 };
+}
+
+function formatUserCostCandidate(user, index) {
+  const name = escapeMrkdwn(user.name || 'Okänd');
+  const email = user.email ? ` (${escapeMrkdwn(user.email)})` : '';
+  const currentCost = user.cost != null ? ` - nuvarande ${formatUserCostValue(user.cost)}` : ' - ingen cost satt';
+  return `${index}. ${name}${email}${currentCost}`;
+}
+
+function buildUserCostSelectionMessage(firstName, candidates) {
+  const lines = [
+    `Jag hittade flera users med förnamnet *${escapeMrkdwn(firstName)}*.`,
+    'Svara med numret för rätt person, eller skriv `!cancel` för att avbryta.',
+    '',
+  ];
+
+  candidates.forEach((candidate, index) => {
+    lines.push(formatUserCostCandidate(candidate, index + 1));
+  });
+
+  return lines.join('\n');
+}
+
+function buildUserCostAmountMessage(user) {
+  const name = escapeMrkdwn(user.name || 'Okänd');
+  return [
+    `Hur mycket kostar *${name}* per timme?`,
+    'Svara med ett belopp i kr/timme, till exempel `350` eller `350,50`.',
+    'Skriv `!cancel` om du vill avbryta.',
+  ].join('\n');
+}
+
+async function sendUserCostMessage(client, channel, body, threadTs, isError = false) {
+  await postSlackMessage(client, channel, buildPlainMessagePayload(body), threadTs);
+}
+
+async function startUserCostSetup({ text, channel, client, threadTs, slackUserId }) {
+  const firstName = sanitizeInput(text).split(' ')[0];
+
+  if (!firstName) {
+    await sendUserCostMessage(client, channel, 'Usage: !user cost <förnamn>', threadTs, true);
+    return true;
+  }
+
+  const candidates = await userRepository.findUsersByFirstName(firstName);
+
+  if (candidates.length === 0) {
+    await sendUserCostMessage(
+      client,
+      channel,
+      `Jag hittade ingen user med förnamnet *${escapeMrkdwn(firstName)}*.`,
+      threadTs,
+      true
+    );
+    return true;
+  }
+
+  const key = `${slackUserId}:${channel}`;
+
+  if (candidates.length === 1) {
+    userCostSetupStore.set(key, {
+      step: 'amount',
+      user: candidates[0],
+      requester: slackUserId,
+    });
+
+    await sendUserCostMessage(client, channel, buildUserCostAmountMessage(candidates[0]), threadTs);
+    return true;
+  }
+
+  userCostSetupStore.set(key, {
+    step: 'choose-user',
+    firstName,
+    candidates,
+    requester: slackUserId,
+  });
+
+  await sendUserCostMessage(client, channel, buildUserCostSelectionMessage(firstName, candidates), threadTs);
+  return true;
+}
+
+async function handlePendingUserCostSetup(event, client) {
+  const key = `${event.user}:${event.channel}`;
+  const state = userCostSetupStore.get(key);
+
+  if (!state) {
+    return false;
+  }
+
+  const rawText = String(event.text || '').trim();
+  const normalizedText = rawText.toLowerCase();
+  const replyChannel = event.channel;
+  const threadTs = event.thread_ts;
+
+  if (normalizedText === '!cancel' || normalizedText === 'cancel' || normalizedText === 'stop') {
+    userCostSetupStore.delete(key);
+    await sendUserCostMessage(client, replyChannel, 'User cost setup cancelled.', threadTs);
+    return true;
+  }
+
+  if (state.step === 'choose-user') {
+    const selection = Number.parseInt(rawText, 10);
+
+    if (!Number.isInteger(selection) || selection < 1 || selection > state.candidates.length) {
+      await sendUserCostMessage(
+        client,
+        replyChannel,
+        `Svara med ett nummer mellan 1 och ${state.candidates.length}, eller skriv !cancel för att avbryta.`,
+        threadTs,
+        true
+      );
+      return true;
+    }
+
+    const selectedUser = state.candidates[selection - 1];
+    userCostSetupStore.set(key, {
+      step: 'amount',
+      user: selectedUser,
+      requester: state.requester,
+    });
+
+    await sendUserCostMessage(client, replyChannel, buildUserCostAmountMessage(selectedUser), threadTs);
+    return true;
+  }
+
+  if (state.step === 'amount') {
+    const parsedCost = parseCostInput(rawText);
+
+    if (!parsedCost.ok) {
+      await sendUserCostMessage(client, replyChannel, parsedCost.message, threadTs, true);
+      return true;
+    }
+
+    const updatedUser = await userRepository.updateUserCostById(state.user.id, parsedCost.value);
+    if (!updatedUser) {
+      await sendUserCostMessage(client, replyChannel, 'Jag kunde inte uppdatera cost på den usern.', threadTs, true);
+      return true;
+    }
+
+    userCostSetupStore.delete(key);
+    await sendUserCostMessage(
+      client,
+      replyChannel,
+      `Sparat: *${escapeMrkdwn(updatedUser.name || state.user.name || 'Okänd')}* kostar nu ${formatUserCostValue(parsedCost.value)}.`,
+      threadTs
+    );
+    return true;
+  }
+
+  userCostSetupStore.delete(key);
+  return false;
+}
+
 function extractJsonPayload(rawText) {
   const text = String(rawText || '').trim();
   if (!text) {
@@ -377,6 +593,55 @@ function formatProjectLastWeek(report) {
 
   if (report.period?.label) {
     lines.push(formatDetailLine('Period', escapeMrkdwn(report.period.label)));
+  }
+
+  return lines.join('\n');
+}
+
+function formatProjectCost(report) {
+  if (!report || typeof report !== 'object') {
+    return formatPlainLinesAsBullets(report);
+  }
+
+  const lines = [
+    `• 💰 ${escapeMrkdwn(report.projectName || 'Okänt projekt')} (${escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
+    formatDetailLine('Timmar', `${formatNumber(report.totalHours ?? 0)} h`),
+    formatDetailLine('Totalkostnad', formatCurrency(report.totalCost ?? 0)),
+    formatDetailLine('Deltagare', formatNumber(report.participantCount ?? 0)),
+  ];
+
+  if (report.missingCostCount > 0) {
+    lines.push(formatDetailLine('Saknar cost', formatNumber(report.missingCostCount)));
+  }
+
+  if (Array.isArray(report.participants) && report.participants.length > 0) {
+    lines.push('');
+    lines.push('  Kostnadsfördelning:');
+
+    for (const participant of report.participants) {
+      const name = escapeMrkdwn(participant.name || 'Okänd');
+      const email = participant.email ? ` (${escapeMrkdwn(participant.email)})` : '';
+      const hours = formatNumber(participant.totalHours ?? 0);
+      const rate = participant.costPerHour != null ? `${formatNumber(participant.costPerHour)} kr/h` : 'cost saknas';
+      const totalCost = participant.totalCost != null ? formatCurrency(participant.totalCost) : 'kostnad saknas';
+      lines.push(`    - ${formatInlineCode(`${name}${email}: ${hours} h, ${rate}, ${totalCost}`)}`);
+    }
+  }
+
+  if (Array.isArray(report.missingCostUsers) && report.missingCostUsers.length > 0) {
+    lines.push('');
+    lines.push('  Användare utan cost:');
+
+    for (const user of report.missingCostUsers) {
+      const name = escapeMrkdwn(user.name || 'Okänd');
+      const email = user.email ? ` (${escapeMrkdwn(user.email)})` : '';
+      lines.push(`    - ${formatInlineCode(`${name}${email}: ${formatNumber(user.totalHours ?? 0)} h`)}`);
+    }
+  }
+
+  if (report.missingCostCount > 0) {
+    lines.push('');
+    lines.push('  Obs: totalen är ett minimum eftersom vissa users saknar cost.');
   }
 
   return lines.join('\n');
@@ -518,6 +783,10 @@ function formatCommandOutput(commandName, rawOutput) {
 
   if (commandName === 'project last week') {
     return formatProjectLastWeek(parsedOutput);
+  }
+
+  if (commandName === 'project cost') {
+    return formatProjectCost(parsedOutput);
   }
 
   if (commandName === 'project team') {
@@ -960,6 +1229,16 @@ async function handleTextCommand({
     return true;
   }
 
+  if (config.customHandler === 'user-cost-setup') {
+    return startUserCostSetup({
+      text: parsed.commandText,
+      channel,
+      client,
+      threadTs,
+      slackUserId,
+    });
+  }
+
   if (config.customHandler === 'timesheet-reminder-status') {
     if (!slackUserId) {
       const messages = buildMultiMessagePayload(
@@ -1005,7 +1284,7 @@ async function handleTextCommand({
     return true;
   }
 
-  if (parsed.commandName === 'project info' || parsed.commandName === 'project last week') {
+  if (parsed.commandName === 'project info' || parsed.commandName === 'project last week' || parsed.commandName === 'project cost') {
     const resolvedProject = await resolveProjectKey(inputText);
 
     if (!resolvedProject) {
@@ -1121,4 +1400,5 @@ async function handleTextCommand({
 
 module.exports = {
   handleTextCommand,
+  handlePendingUserCostSetup,
 };
