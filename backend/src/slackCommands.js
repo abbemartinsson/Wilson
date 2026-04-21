@@ -229,12 +229,6 @@ function buildHelpMessageForRole(role) {
   const usedCommandNames = new Set();
   const helpLines = [`📚 Tillgängliga kommandon för roll: *${roleLabel}*`, ''];
 
-  if (allowedSet.has('help')) {
-    helpLines.push('• ❓ *Hjälp:*');
-    helpLines.push(`   - \`${COMMAND_USAGE_TEXT.help}\` - ${COMMAND_SHORT_DESCRIPTIONS.help}`);
-    helpLines.push('');
-  }
-
   for (const group of HELP_COMMAND_GROUPS) {
     const visibleCommands = group.commands.filter((commandName) => allowedSet.has(commandName));
     if (visibleCommands.length === 0) {
@@ -940,25 +934,7 @@ function parseCommandText(text) {
 function buildMessagePayload(title, body, isError = false) {
   const safeBody = body && body.trim() ? body.trim() : 'No output.';
 
-  return {
-    text: `${title}\n${safeBody}`,
-    blocks: [
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: `${isError ? ':x:' : ':white_check_mark:'} *${title}*`,
-        },
-      },
-      {
-        type: 'section',
-        text: {
-          type: 'mrkdwn',
-          text: safeBody,
-        },
-      },
-    ],
-  };
+  return buildPlainMessagePayload(safeBody);
 }
 
 function buildPlainMessagePayload(body) {
@@ -986,36 +962,21 @@ function buildMultiMessagePayload(title, body, isError = false, options = {}) {
   const lines = safeBody.split('\n');
 
   if (lines.length <= maxLinesPerMessage) {
-    // Short content, send as single message
-    return [buildMessagePayload(title, body, isError)];
+    return [buildPlainMessagePayload(safeBody)];
   }
 
-  // Long content, split into multiple messages
   const messages = [];
   let currentContent = [];
 
-  // First message with title
   for (let i = 0; i < Math.min(maxLinesPerMessage, lines.length); i++) {
     currentContent.push(lines[i]);
   }
 
-  messages.push(buildMessagePayload(title, currentContent.join('\n'), isError));
+  messages.push(buildPlainMessagePayload(currentContent.join('\n')));
 
-  // Additional messages for remaining content
   for (let i = maxLinesPerMessage; i < lines.length; i += maxLinesPerMessage) {
     const chunk = lines.slice(i, Math.min(i + maxLinesPerMessage, lines.length)).join('\n');
-    messages.push({
-      text: chunk,
-      blocks: [
-        {
-          type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: chunk,
-          },
-        },
-      ],
-    });
+    messages.push(buildPlainMessagePayload(chunk));
   }
 
   return messages;
