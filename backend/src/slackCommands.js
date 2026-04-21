@@ -123,20 +123,6 @@ const ROLE_LABELS = {
   member: 'Medlem',
 };
 
-const COMMAND_HELP_TEXT = {
-  help: '❓ !help - Visa alla tillgängliga kommandon.',
-  'project info': '📁 !project info <key_or_name> - Visa projektets info och timmar.',
-  'project last week': '📆 !project last week <key_or_name> - Visa timmar för förra veckan.',
-  'project team': '👥 !project team <key_or_name> - Visa vilka som jobbat i projektet.',
-  projects: '📋 !projects - Lista alla projekt.',
-  forecast: '📈 !forecast [months 1-12] - Visa prognos för kommande månader.',
-  history: '🗓 !history [month] - Jämför historisk tid för en månad.',
-  'reminder setup': '⏰ !reminder setup - Ställ in logg reminder.',
-  'reminder status': '✅ !reminder status - Visa status för logg reminder.',
-  'reminder update': '♻️ !reminder update - Uppdatera logg reminder.',
-  'reminder hours': '📊 !reminder hours - Visa loggade timmar för veckan.',
-};
-
 const COMMAND_USAGE_TEXT = {
   help: '!help',
   'project info': '!project info <key_or_name>',
@@ -156,7 +142,7 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   'project info': 'Visar projektets data.',
   'project last week': 'Visar timmar förra veckan.',
   'project team': 'Visar vilka som jobbat.',
-  projects: 'Listar alla projekt.',
+  projects: 'Listar alla aktiva projekt.',
   forecast: 'Visar prognos framåt.',
   history: 'Jämför med tidigare år.',
   'reminder setup': 'Ställer in reminder.',
@@ -989,7 +975,7 @@ async function handleTextCommand({
 
     const user = await timesheetReminderService.getUserReminderStatusBySlackAccountId(slackUserId);
     const body = timesheetReminderService.buildReminderStatusMessage(user);
-    await postSlackMessage(client, channel, buildMessagePayload('Reminder status', body, false), threadTs);
+    await postSlackMessage(client, channel, buildPlainMessagePayload(body), threadTs);
     return true;
   }
 
