@@ -2,6 +2,9 @@ const path = require('path');
 const { execFile } = require('child_process');
 const timesheetReminderService = require('./services/timesheetReminderService');
 const userRepository = require('./repositories/userRepository');
+const issueRepository = require('./repositories/issueRepository');
+const worklogRepository = require('./repositories/worklogRepository');
+const tempoClient = require('./clients/tempoClient');
 
 const COMMAND_PREFIX = '!';
 const PROJECT_ROOT = path.join(__dirname, '..');
@@ -32,6 +35,10 @@ const commandMap = {
     customHandler: 'user-cost-setup',
     requiresText: true,
     usage: '!user cost <förnamn>',
+  },
+  worklog: {
+    customHandler: 'worklog-setup',
+    usage: '!worklog',
   },
   'project team': {
     scriptCommand: 'project-participants',
@@ -89,6 +96,7 @@ const ROLE_PERMISSION_CONFIG = {
       'forecast',
       'project team',
       'history',
+      'worklog',
       'reminder setup',
       'reminder update',
       'reminder status',
@@ -139,6 +147,7 @@ const COMMAND_USAGE_TEXT = {
   'project last week': '!project last week <key_or_name>',
   'project cost': '!project cost <key_or_name>',
   'user cost': '!user cost <förnamn>',
+  worklog: '!worklog',
   'project team': '!project team <key_or_name>',
   projects: '!projects',
   forecast: '!forecast [months 1-12]',
@@ -155,6 +164,7 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   'project last week': 'Visar timmar förra veckan.',
   'project cost': 'Visar projektets totalkostnad.',
   'user cost': 'Sätter en users kostnad per timme.',
+  worklog: 'Loggar tid på ett av dina issues.',
   'project team': 'Visar vilka som jobbat.',
   projects: 'Listar alla aktiva projekt.',
   forecast: 'Visar prognos framåt.',
@@ -182,6 +192,11 @@ const HELP_COMMAND_GROUPS = [
     commands: ['reminder setup', 'reminder update', 'reminder status', 'reminder hours'],
   },
   {
+    title: 'Tidloggning',
+    emoji: '⏳',
+    commands: ['worklog'],
+  },
+  {
     title: 'Admin',
     emoji: '🛠️',
     commands: ['project cost', 'user cost'],
@@ -189,6 +204,7 @@ const HELP_COMMAND_GROUPS = [
 ];
 
 const userCostSetupStore = new Map();
+const worklogSetupStore = new Map();
 
 function normalizeUserRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
@@ -494,6 +510,279 @@ async function handlePendingUserCostSetup(event, client) {
   }
 
   userCostSetupStore.delete(key);
+  return false;
+}
+
+function formatWorklogIssueCandidate(issue, index) {
+  const key = escapeMrkdwn(issue.jira_issue_key || 'okänd nyckel');
+  const title = formatInlineCode(issue.title || 'Okänd issue');
+  const status = escapeMrkdwn(issue.status || 'Okänd status');
+
+  return `${index}. ${key} - ${title} (${status})`;
+}
+
+function buildWorklogSelectionMessage(issues) {
+  const lines = [
+    'Jag hittade dessa issues som är assignade till dig.',
+    'Svara med numret för den issue du vill logga tid på, eller skriv `!cancel` för att avbryta.',
+    '',
+  ];
+
+  issues.forEach((issue, index) => {
+    lines.push(formatWorklogIssueCandidate(issue, index + 1));
+  });
+
+  return lines.join('\n');
+}
+
+function buildWorklogHoursMessage(issue) {
+  const key = escapeMrkdwn(issue.jira_issue_key || 'okänd issue');
+  const title = escapeMrkdwn(issue.title || 'Okänd issue');
+
+  return [
+    `Hur många timmar vill du logga på *${key}*?`,
+    `• ${title}`,
+    'Svara med ett tal, till exempel `1,5` eller `2`.',
+    'Skriv `!cancel` om du vill avbryta.',
+  ].join('\n');
+}
+
+function buildWorklogConfirmationMessage(issue, hours) {
+  const key = escapeMrkdwn(issue.jira_issue_key || 'okänd issue');
+  const title = escapeMrkdwn(issue.title || 'Okänd issue');
+  return `Sparat: ${formatNumber(hours)} h på *${key}* - ${title}.`;
+}
+
+function isDoneLikeIssueStatus(status) {
+  const normalized = String(status || '')
+    .trim()
+    .toLowerCase();
+
+  if (!normalized) {
+    return false;
+  }
+
+  // Common done-like workflow statuses in Jira (English + Swedish).
+  const doneMarkers = ['done', 'closed', 'resolved', 'complete', 'completed', 'klar', 'slutford', 'fardig'];
+  return doneMarkers.some((marker) => normalized.includes(marker));
+}
+
+function parseWorklogHours(inputText) {
+  const normalized = String(inputText || '')
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/(?:tim|timmar|h|hours?)$/g, '')
+    .replace(',', '.');
+
+  if (!normalized) {
+    return { ok: false, message: 'Skriv ett antal timmar, till exempel 1,5 eller 2.' };
+  }
+
+  if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) {
+    return { ok: false, message: 'Jag kunde inte läsa tiden. Skriv ett tal, till exempel 1,5 eller 2.' };
+  }
+
+  const hours = Number.parseFloat(normalized);
+  if (!Number.isFinite(hours) || hours <= 0) {
+    return { ok: false, message: 'Tiden måste vara större än 0.' };
+  }
+
+  if (hours > 24) {
+    return { ok: false, message: 'Tiden verkar för hög för en worklogg. Skriv ett värde på 24 timmar eller mindre.' };
+  }
+
+  return { ok: true, value: hours };
+}
+
+async function sendWorklogMessage(client, channel, body, threadTs) {
+  await postSlackMessage(client, channel, buildPlainMessagePayload(body), threadTs);
+}
+
+async function startWorklogSetup({ channel, client, threadTs, slackUserId }) {
+  if (!slackUserId) {
+    await sendWorklogMessage(client, channel, 'Jag kunde inte identifiera ditt Slack-konto.', threadTs);
+    return true;
+  }
+
+  const user = await userRepository.findUserBySlackAccountId(slackUserId);
+  if (!user) {
+    await sendWorklogMessage(
+      client,
+      channel,
+      'Jag hittade ingen användare kopplad till ditt Slack-konto. Skriv gärna ett DM först så jag kan länka dig.',
+      threadTs
+    );
+    return true;
+  }
+
+  const allAssignedIssues = await issueRepository.findIssuesByAssigneeUserId(user.id);
+  const issues = allAssignedIssues.filter((issue) => !isDoneLikeIssueStatus(issue.status));
+
+  if (issues.length === 0) {
+    await sendWorklogMessage(client, channel, 'Jag hittade inga aktiva (ej done) issues som är assignade till dig.', threadTs);
+    return true;
+  }
+
+  const key = `${slackUserId}:${channel}`;
+  worklogSetupStore.set(key, {
+    step: 'choose-issue',
+    user,
+    issues,
+    requester: slackUserId,
+  });
+
+  const selectionMessage = buildWorklogSelectionMessage(issues);
+  const messages = buildSplitPlainMessages(selectionMessage, { maxLinesPerMessage: 12 });
+  for (const message of messages) {
+    await postSlackMessage(client, channel, message, threadTs);
+  }
+
+  return true;
+}
+
+async function handlePendingWorklogSetup(event, client) {
+  const key = `${event.user}:${event.channel}`;
+  const state = worklogSetupStore.get(key);
+
+  if (!state) {
+    return false;
+  }
+
+  const rawText = String(event.text || '').trim();
+  const normalizedText = rawText.toLowerCase();
+  const replyChannel = event.channel;
+  const threadTs = event.thread_ts;
+
+  if (normalizedText === '!cancel' || normalizedText === 'cancel' || normalizedText === 'stop') {
+    worklogSetupStore.delete(key);
+    await sendWorklogMessage(client, replyChannel, 'Worklog-flödet avbröts.', threadTs);
+    return true;
+  }
+
+  if (state.step === 'choose-issue') {
+    const selection = Number.parseInt(rawText, 10);
+
+    if (!Number.isInteger(selection) || selection < 1 || selection > state.issues.length) {
+      await sendWorklogMessage(
+        client,
+        replyChannel,
+        `Svara med ett nummer mellan 1 och ${state.issues.length}, eller skriv !cancel för att avbryta.`,
+        threadTs
+      );
+      return true;
+    }
+
+    const selectedIssue = state.issues[selection - 1];
+    worklogSetupStore.set(key, {
+      step: 'hours',
+      user: state.user,
+      issue: selectedIssue,
+      requester: state.requester,
+    });
+
+    await sendWorklogMessage(client, replyChannel, buildWorklogHoursMessage(selectedIssue), threadTs);
+    return true;
+  }
+
+  if (state.step === 'hours') {
+    const parsedHours = parseWorklogHours(rawText);
+
+    if (!parsedHours.ok) {
+      await sendWorklogMessage(client, replyChannel, parsedHours.message, threadTs);
+      return true;
+    }
+
+    if (!state.issue?.id) {
+      worklogSetupStore.delete(key);
+      await sendWorklogMessage(
+        client,
+        replyChannel,
+        'Kunde inte hitta internt issue-id för vald issue. Kör !worklog igen efter nästa sync.',
+        threadTs
+      );
+      return true;
+    }
+
+    if (!state.issue?.jira_issue_id) {
+      worklogSetupStore.delete(key);
+      await sendWorklogMessage(
+        client,
+        replyChannel,
+        'Kunde inte hitta Jira issue-id för vald issue. Kör !worklog igen efter nästa sync.',
+        threadTs
+      );
+      return true;
+    }
+
+    if (!state.user?.jira_account_id) {
+      worklogSetupStore.delete(key);
+      await sendWorklogMessage(
+        client,
+        replyChannel,
+        'Din användare saknar jira_account_id i databasen. Kör sync:users och testa igen.',
+        threadTs
+      );
+      return true;
+    }
+
+    const startedAt = new Date(Date.now() - parsedHours.value * 60 * 60 * 1000).toISOString();
+    const timeSpentSeconds = Math.round(parsedHours.value * 3600);
+
+    let createdTempoWorklog;
+    try {
+      createdTempoWorklog = await tempoClient.createWorklog({
+        issueId: state.issue.jira_issue_id,
+        timeSpentSeconds,
+        startedAt,
+        authorAccountId: state.user.jira_account_id,
+        description: 'Logged via Slack worklog command',
+      });
+    } catch (error) {
+      const apiMessage = error?.response?.data?.message || error?.message || 'Okänt fel från Tempo API';
+      await sendWorklogMessage(
+        client,
+        replyChannel,
+        `Kunde inte logga i Tempo/Jira: ${escapeMrkdwn(String(apiMessage))}`,
+        threadTs
+      );
+      return true;
+    }
+
+    const tempoShapeWorklog = {
+      id: createdTempoWorklog?.tempoWorklogId || createdTempoWorklog?.id || createdTempoWorklog?.worklogId,
+      issue: { id: String(state.issue.jira_issue_id) },
+      author: { accountId: state.user.jira_account_id },
+      timeSpentSeconds,
+      startedAt,
+    };
+
+    try {
+      await worklogRepository.upsertWorklogs([tempoShapeWorklog]);
+    } catch (error) {
+      const localMessage = error?.message || 'Okänt fel vid lokal sync';
+      await sendWorklogMessage(
+        client,
+        replyChannel,
+        `Loggning i Tempo/Jira lyckades men lokal sync misslyckades: ${escapeMrkdwn(String(localMessage))}`,
+        threadTs
+      );
+      worklogSetupStore.delete(key);
+      return true;
+    }
+
+    worklogSetupStore.delete(key);
+
+    await sendWorklogMessage(
+      client,
+      replyChannel,
+      `${buildWorklogConfirmationMessage(state.issue, parsedHours.value)}\nSynkat till Tempo/Jira.`,
+      threadTs
+    );
+    return true;
+  }
+
+  worklogSetupStore.delete(key);
   return false;
 }
 
@@ -1200,6 +1489,15 @@ async function handleTextCommand({
     });
   }
 
+  if (config.customHandler === 'worklog-setup') {
+    return startWorklogSetup({
+      channel,
+      client,
+      threadTs,
+      slackUserId,
+    });
+  }
+
   if (config.customHandler === 'timesheet-reminder-status') {
     if (!slackUserId) {
       const messages = buildMultiMessagePayload(
@@ -1362,4 +1660,5 @@ async function handleTextCommand({
 module.exports = {
   handleTextCommand,
   handlePendingUserCostSetup,
+  handlePendingWorklogSetup,
 };

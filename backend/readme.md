@@ -54,6 +54,14 @@ Admin kan också sätta en users kostnad per timme med ett interaktivt kommando:
 
 Om flera users har samma förnamn listar boten alla träffar och du får välja rätt person innan du anger beloppet i kr/timme.
 
+Du kan också logga tid på ett av dina assignade issues med:
+
+```text
+!worklog
+```
+
+Boten listar dina assignade issues som en numrerad lista. Svara med till exempel `1` eller `5`, ange sedan antal timmar och workloggen sparas i databasen.
+
 Exempel på uppdatering av roll för en användare:
 
 ```sql

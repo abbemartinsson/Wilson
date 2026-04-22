@@ -63,6 +63,24 @@ async function upsertIssues(issues) {
   return data || rows;
 }
 
+async function findIssuesByAssigneeUserId(userId) {
+  if (!userId) {
+    return [];
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select('id, jira_issue_id, jira_issue_key, project_id, title, status, estimated_time_seconds, updated_at')
+    .eq('assignee_user_id', userId)
+    .order('updated_at', { ascending: false });
+
+  if (error) {
+    throw error;
+  }
+
+  return data || [];
+}
+
 /**
  * Build a map from jira_project_id to internal project id
  */
@@ -103,4 +121,5 @@ async function buildUserLookupMap() {
 
 module.exports = {
   upsertIssues,
+  findIssuesByAssigneeUserId,
 };

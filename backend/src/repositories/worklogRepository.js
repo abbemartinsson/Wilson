@@ -6,6 +6,35 @@ const supabase = createClient(config.url, config.serviceRoleKey);
 
 const TABLE = 'WORKLOGS';
 
+async function insertManualWorklog({ issueId, userId, timeSpentSeconds, startedAt }) {
+  const now = new Date().toISOString();
+  const normalizedStartedAt = normalizeTimestamp(startedAt);
+  const manualTempoId = `manual-${userId}-${issueId}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+  const row = {
+    jira_tempo_id: manualTempoId,
+    issue_id: issueId,
+    user_id: userId,
+    time_spent_seconds: timeSpentSeconds,
+    started_at: normalizedStartedAt,
+    created_at: now,
+    updated_at: now,
+  };
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .insert([row])
+    .select('*')
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || row;
+}
+
 async function upsertWorklogs(worklogs) {
   const issueMap = await buildIssueLookupMap();
   const userMap = await buildUserLookupMap();
@@ -258,5 +287,6 @@ function dedupeRowsByTempoId(rows) {
 }
 
 module.exports = {
+  insertManualWorklog,
   upsertWorklogs,
 };
