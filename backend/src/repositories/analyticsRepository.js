@@ -722,6 +722,199 @@ async function getProjectCostReport(input) {
 	};
 }
 
+async function getProjectTaskWorklogReport(input, options = {}) {
+	const normalizedInput = String(input || '').trim();
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
+	}
+
+	const { startDate, endDate } = options;
+
+	const project = await findProjectByKeyOrName(normalizedInput);
+	if (!project) {
+		return null;
+	}
+
+	const issueIds = await getIssueIdsForProject(project.id);
+	if (issueIds.length === 0) {
+		return {
+			projectId: project.id,
+			projectKey: project.jira_project_key,
+			projectName: project.name,
+			totalSeconds: 0,
+			totalWorklogs: 0,
+			uniqueTaskCount: 0,
+			tasks: [],
+		};
+	}
+
+	const worklogs = await getAllWorklogsForForecast({
+		startDate,
+		endDate,
+		projectKey: normalizedInput,
+	});
+
+	if (worklogs.length === 0) {
+		return {
+			projectId: project.id,
+			projectKey: project.jira_project_key,
+			projectName: project.name,
+			totalSeconds: 0,
+			totalWorklogs: 0,
+			uniqueTaskCount: 0,
+			tasks: [],
+		};
+	}
+
+	const issueDetailsMap = await getIssueDetailsMapByIds(issueIds);
+	const tasksMap = new Map();
+	let totalSeconds = 0;
+
+	for (const worklog of worklogs) {
+		totalSeconds += worklog.time_spent_seconds || 0;
+		const issueId = worklog.issue_id;
+		if (!issueId) {
+			continue;
+		}
+
+		if (!tasksMap.has(issueId)) {
+			const issue = issueDetailsMap.get(issueId);
+			tasksMap.set(issueId, {
+				issueId,
+				issueKey: issue?.jira_issue_key || `ISSUE-${issueId}`,
+				title: issue?.title || 'Okänd task',
+				totalSeconds: 0,
+				worklogCount: 0,
+			});
+		}
+
+		const task = tasksMap.get(issueId);
+		task.totalSeconds += worklog.time_spent_seconds || 0;
+		task.worklogCount += 1;
+	}
+
+	const tasks = Array.from(tasksMap.values()).sort((left, right) => right.totalSeconds - left.totalSeconds);
+
+	return {
+		projectId: project.id,
+		projectKey: project.jira_project_key,
+		projectName: project.name,
+		totalSeconds,
+		totalWorklogs: worklogs.length,
+		uniqueTaskCount: tasks.length,
+		tasks,
+	};
+}
+
+async function getProjectUserWorklogReport(input, options = {}) {
+	const normalizedInput = String(input || '').trim();
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
+	}
+
+	const { startDate, endDate } = options;
+
+	const project = await findProjectByKeyOrName(normalizedInput);
+	if (!project) {
+		return null;
+	}
+
+	const worklogs = await getAllWorklogsForForecast({
+		startDate,
+		endDate,
+		projectKey: normalizedInput,
+	});
+
+	if (worklogs.length === 0) {
+		return {
+			projectId: project.id,
+			projectKey: project.jira_project_key,
+			projectName: project.name,
+			totalWorklogs: 0,
+			entries: [],
+		};
+	}
+
+	const issueIds = Array.from(new Set(worklogs.map((worklog) => worklog.issue_id).filter(Boolean)));
+	const userIds = Array.from(new Set(worklogs.map((worklog) => worklog.user_id).filter(Boolean)));
+
+	const issueDetailsMap = await getIssueDetailsMapByIds(issueIds);
+	const userDetailsMap = await getUserDetailsMapByIds(userIds);
+
+	const entries = worklogs.map((worklog) => {
+		const issue = issueDetailsMap.get(worklog.issue_id);
+		const user = userDetailsMap.get(worklog.user_id);
+
+		return {
+			issueId: worklog.issue_id,
+			issueKey: issue?.jira_issue_key || `ISSUE-${worklog.issue_id || ''}`,
+			title: issue?.title || 'Okänd task',
+			userId: worklog.user_id,
+			userName: user?.name || `User ${worklog.user_id}`,
+			userEmail: user?.email || '',
+			timeSpentSeconds: worklog.time_spent_seconds || 0,
+		};
+	});
+
+	return {
+		projectId: project.id,
+		projectKey: project.jira_project_key,
+		projectName: project.name,
+		totalWorklogs: worklogs.length,
+		entries,
+	};
+}
+
+async function getIssueDetailsMapByIds(issueIds) {
+	const map = new Map();
+
+	for (const chunk of chunkArray(issueIds, 200)) {
+		if (chunk.length === 0) {
+			continue;
+		}
+
+		const { data, error } = await supabase
+			.from(ISSUES_TABLE)
+			.select('id, jira_issue_key, title')
+			.in('id', chunk);
+
+		if (error) {
+			throw error;
+		}
+
+		for (const row of data || []) {
+			map.set(row.id, row);
+		}
+	}
+
+	return map;
+}
+
+async function getUserDetailsMapByIds(userIds) {
+	const map = new Map();
+
+	for (const chunk of chunkArray(userIds, 200)) {
+		if (chunk.length === 0) {
+			continue;
+		}
+
+		const { data, error } = await supabase
+			.from('USERS')
+			.select('id, name, email')
+			.in('id', chunk);
+
+		if (error) {
+			throw error;
+		}
+
+		for (const row of data || []) {
+			map.set(row.id, row);
+		}
+	}
+
+	return map;
+}
+
 module.exports = {
 	getProjectInfo,
 	searchProjects,
@@ -731,4 +924,6 @@ module.exports = {
 	getHistoricalComparisonByMonth,
 	getProjectParticipants,
 	getProjectCostReport,
+	getProjectTaskWorklogReport,
+	getProjectUserWorklogReport,
 };

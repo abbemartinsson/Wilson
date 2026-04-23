@@ -173,6 +173,14 @@ function formatDateParts(parts) {
 	return `${parts.year}-${month}-${day}`;
 }
 
+function formatDatePartsForReport(parts) {
+	const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+	const month = monthNames[parts.month - 1];
+	const day = String(parts.day).padStart(2, '0');
+	const year = String(parts.year).slice(-2);
+	return `${day}/${month}/${year}`;
+}
+
 function getDatePartsInTimeZone(date, timeZone) {
 	const formatter = new Intl.DateTimeFormat('en-CA', {
 		timeZone,
@@ -375,6 +383,236 @@ async function getProjectParticipants(projectKey) {
 	}
 }
 
+async function getProjectWeeklyReport(projectKey, period = 'week', monthNumber = null) {
+	const normalizedInput = String(projectKey || '').trim();
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
+	}
+
+	const normalizedPeriod = String(period || '').trim().toLowerCase();
+	if (normalizedPeriod !== 'week' && normalizedPeriod !== 'month') {
+		throw new Error('Period must be either "week" or "month"');
+	}
+
+	let range;
+	if (normalizedPeriod === 'month' && monthNumber) {
+		const month = Number.parseInt(String(monthNumber || '').trim(), 10);
+		if (Number.isNaN(month) || month < 1 || month > 12) {
+			throw new Error('Invalid month number');
+		}
+		const now = new Date();
+		const year = now.getUTCFullYear();
+		range = getMonthRangeInStockholm(year, month);
+	} else {
+		range = getRecentPeriodRangeInStockholm(normalizedPeriod);
+	}
+
+	const report = await analyticsRepository.getProjectTaskWorklogReport(normalizedInput, {
+		startDate: range.startDateUtc,
+		endDate: range.endDateUtc,
+	});
+
+	if (!report) {
+		return null;
+	}
+
+	const tasks = Array.isArray(report.tasks) ? report.tasks : [];
+	const totalSeconds = tasks.reduce((sum, task) => sum + (task.totalSeconds || 0), 0);
+	const totalWorklogs = tasks.reduce((sum, task) => sum + (task.worklogCount || 0), 0);
+
+	return {
+		projectId: report.projectId,
+		projectKey: report.projectKey,
+		projectName: report.projectName,
+		period: {
+			type: normalizedPeriod,
+			timeZone: 'Europe/Stockholm',
+			startDate: range.startDate,
+			endDate: range.endDate,
+			label: `${range.startDateFormatted} - ${range.endDateFormatted}`,
+		},
+		totalSeconds,
+		totalHours: roundToTwoDecimals(totalSeconds / 3600),
+		totalWorklogs: totalWorklogs,
+		uniqueTaskCount: tasks.length,
+		tasks: tasks.map((task) => ({
+			issueId: task.issueId,
+			issueKey: task.issueKey,
+			title: task.title,
+			totalSeconds: task.totalSeconds,
+			totalHours: roundToTwoDecimals(task.totalSeconds / 3600),
+			worklogCount: task.worklogCount,
+		})),
+	};
+}
+
+async function getProjectTeamWeeklyReport(projectKey, period = 'week', monthNumber = null) {
+	const normalizedInput = String(projectKey || '').trim();
+	if (!normalizedInput) {
+		throw new Error('Project key or name is required');
+	}
+
+	const normalizedPeriod = String(period || '').trim().toLowerCase();
+	if (normalizedPeriod !== 'week' && normalizedPeriod !== 'month') {
+		throw new Error('Period must be either "week" or "month"');
+	}
+
+	let range;
+	if (normalizedPeriod === 'month' && monthNumber) {
+		const month = Number.parseInt(String(monthNumber || '').trim(), 10);
+		if (Number.isNaN(month) || month < 1 || month > 12) {
+			throw new Error('Invalid month number');
+		}
+		const now = new Date();
+		const year = now.getUTCFullYear();
+		range = getMonthRangeInStockholm(year, month);
+	} else {
+		range = getRecentPeriodRangeInStockholm(normalizedPeriod);
+	}
+
+	const report = await analyticsRepository.getProjectUserWorklogReport(normalizedInput, {
+		startDate: range.startDateUtc,
+		endDate: range.endDateUtc,
+	});
+
+	if (!report) {
+		return null;
+	}
+
+	const entries = Array.isArray(report.entries) ? report.entries : [];
+	const totalSeconds = entries.reduce((sum, entry) => sum + (entry.timeSpentSeconds || 0), 0);
+
+	const participantsMap = new Map();
+	for (const entry of entries) {
+		if (!entry.userId) {
+			continue;
+		}
+
+		if (!participantsMap.has(entry.userId)) {
+			participantsMap.set(entry.userId, {
+				userId: entry.userId,
+				name: entry.userName || `User ${entry.userId}`,
+				email: entry.userEmail || '',
+				totalSeconds: 0,
+				worklogCount: 0,
+				issueKeys: new Set(),
+			});
+		}
+
+		const participant = participantsMap.get(entry.userId);
+		participant.totalSeconds += entry.timeSpentSeconds || 0;
+		participant.worklogCount += 1;
+		if (entry.issueKey) {
+			participant.issueKeys.add(entry.issueKey);
+		}
+	}
+
+	const participants = Array.from(participantsMap.values())
+		.map((participant) => ({
+			userId: participant.userId,
+			name: participant.name,
+			email: participant.email,
+			totalSeconds: participant.totalSeconds,
+			totalHours: roundToTwoDecimals(participant.totalSeconds / 3600),
+			worklogCount: participant.worklogCount,
+			issueCount: participant.issueKeys.size,
+		}))
+		.sort((left, right) => right.totalSeconds - left.totalSeconds);
+
+	return {
+		projectId: report.projectId,
+		projectKey: report.projectKey,
+		projectName: report.projectName,
+		period: {
+			type: normalizedPeriod,
+			timeZone: 'Europe/Stockholm',
+			startDate: range.startDate,
+			endDate: range.endDate,
+			label: `${range.startDateFormatted} - ${range.endDateFormatted}`,
+		},
+		totalSeconds,
+		totalHours: roundToTwoDecimals(totalSeconds / 3600),
+		totalWorklogs: entries.length,
+		participantCount: participants.length,
+		participants,
+	};
+}
+
+function getRecentPeriodRangeInStockholm(period, referenceDate = new Date()) {
+	const stockholmToday = getDatePartsInTimeZone(referenceDate, 'Europe/Stockholm');
+	const stockholmTodayDate = new Date(Date.UTC(stockholmToday.year, stockholmToday.month - 1, stockholmToday.day));
+	
+	if (period === 'month') {
+		// For monthly reports, use previous calendar month
+		let year = stockholmToday.year;
+		let month = stockholmToday.month - 1;
+		
+		if (month < 1) {
+			month = 12;
+			year -= 1;
+		}
+		
+		return getMonthRangeInStockholm(year, month);
+	}
+
+	// For weekly reports
+	const dayOfWeek = stockholmTodayDate.getUTCDay();
+	const daysSinceMonday = (dayOfWeek + 6) % 7;
+
+	const mondayThisWeek = addUtcDays(stockholmTodayDate, -daysSinceMonday);
+	const sundayLastWeek = addUtcDays(mondayThisWeek, -1);
+
+	const startDateUtcDay = addUtcDays(sundayLastWeek, -6); // Last full Monday-Sunday week
+
+	const startParts = {
+		year: startDateUtcDay.getUTCFullYear(),
+		month: startDateUtcDay.getUTCMonth() + 1,
+		day: startDateUtcDay.getUTCDate(),
+	};
+
+	const endParts = {
+		year: sundayLastWeek.getUTCFullYear(),
+		month: sundayLastWeek.getUTCMonth() + 1,
+		day: sundayLastWeek.getUTCDate(),
+	};
+
+	return {
+		startDate: formatDateParts(startParts),
+		endDate: formatDateParts(endParts),
+		startDateFormatted: formatDatePartsForReport(startParts),
+		endDateFormatted: formatDatePartsForReport(endParts),
+		startDateUtc: zonedTimeToUtc(startParts, 0, 0, 0, 'Europe/Stockholm'),
+		endDateUtc: zonedTimeToUtc(endParts, 23, 59, 59, 'Europe/Stockholm'),
+	};
+}
+
+function getMonthRangeInStockholm(year, month) {
+	// Get the first and last day of the month
+	const startDate = new Date(Date.UTC(year, month - 1, 1));
+	const endDate = new Date(Date.UTC(year, month, 0)); // Last day of the month
+
+	const startParts = {
+		year: startDate.getUTCFullYear(),
+		month: startDate.getUTCMonth() + 1,
+		day: startDate.getUTCDate(),
+	};
+
+	const endParts = {
+		year: endDate.getUTCFullYear(),
+		month: endDate.getUTCMonth() + 1,
+		day: endDate.getUTCDate(),
+	};
+
+	return {
+		startDate: formatDateParts(startParts),
+		endDate: formatDateParts(endParts),
+		startDateFormatted: formatDatePartsForReport(startParts),
+		endDateFormatted: formatDatePartsForReport(endParts),
+		startDateUtc: zonedTimeToUtc(startParts, 0, 0, 0, 'Europe/Stockholm'),
+		endDateUtc: zonedTimeToUtc(endParts, 23, 59, 59, 'Europe/Stockholm'),
+	};
+}
+
 module.exports = {
 	getProjectInfo,
 	getProjectCost,
@@ -385,4 +623,6 @@ module.exports = {
 	getHistoricalWorkloadComparison,
 	getWorkloadAnalytics,
 	getProjectParticipants,
+	getProjectWeeklyReport,
+	getProjectTeamWeeklyReport,
 };

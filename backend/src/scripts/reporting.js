@@ -95,6 +95,58 @@ async function main() {
       process.exit(0);
     }
 
+    if (command === 'project-worklog-report') {
+      const projectInput = process.argv[3];
+      const periodInput = String(process.argv[4] || '').trim().toLowerCase();
+      const monthInput = process.argv[5] ? String(process.argv[5] || '').trim() : null;
+
+      if (!projectInput) {
+        console.error('Missing project key or name. Usage: npm run report:project-worklog-report <PROJECT_KEY_OR_NAME> <week|month> [month_number]');
+        process.exit(1);
+      }
+
+      if (periodInput !== 'week' && periodInput !== 'month') {
+        console.error('Missing/invalid period. Usage: npm run report:project-worklog-report <PROJECT_KEY_OR_NAME> <week|month> [month_number]');
+        process.exit(1);
+      }
+
+      const report = await reportingService.getProjectWeeklyReport(projectInput, periodInput, monthInput);
+
+      if (!report) {
+        console.error(`No project found matching: ${projectInput}`);
+        process.exit(1);
+      }
+
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(0);
+    }
+
+    if (command === 'project-worklog-team-report') {
+      const projectInput = process.argv[3];
+      const periodInput = String(process.argv[4] || '').trim().toLowerCase();
+      const monthInput = process.argv[5] ? String(process.argv[5] || '').trim() : null;
+
+      if (!projectInput) {
+        console.error('Missing project key or name. Usage: npm run report:project-worklog-team-report <PROJECT_KEY_OR_NAME> <week|month> [month_number]');
+        process.exit(1);
+      }
+
+      if (periodInput !== 'week' && periodInput !== 'month') {
+        console.error('Missing/invalid period. Usage: npm run report:project-worklog-team-report <PROJECT_KEY_OR_NAME> <week|month> [month_number]');
+        process.exit(1);
+      }
+
+      const report = await reportingService.getProjectTeamWeeklyReport(projectInput, periodInput, monthInput);
+
+      if (!report) {
+        console.error(`No project found matching: ${projectInput}`);
+        process.exit(1);
+      }
+
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(0);
+    }
+
     if (command === 'list-projects') {
       const projects = await reportingService.getAllProjects();
 
@@ -168,6 +220,8 @@ async function main() {
     console.error('\nSupported commands:');
     console.error('  get-project-info <PROJECT_KEY_OR_NAME>');
     console.error('  project-last-week-hours <PROJECT_KEY_OR_NAME>');
+    console.error('  project-worklog-report <PROJECT_KEY_OR_NAME> <week|month>');
+    console.error('  project-worklog-team-report <PROJECT_KEY_OR_NAME> <week|month>');
     console.error('  project-participants <PROJECT_KEY_OR_NAME>');
     console.error('  project-cost <PROJECT_KEY_OR_NAME>');
     console.error('  list-projects');

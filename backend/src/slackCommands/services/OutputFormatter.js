@@ -209,6 +209,62 @@ class OutputFormatter {
     return lines.join('\n');
   }
 
+  formatWeeklyReport(report) {
+    if (!report || typeof report !== 'object') {
+      return this.formatPlainLinesAsBullets(report);
+    }
+
+    const lines = [
+      `• 🗓️ ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
+      this.formatDetailLine('Period', this.escapeMrkdwn(report.period?.label || 'okänd period')),
+      this.formatDetailLine('Total tid', `${this.formatNumber(report.totalHours ?? 0)} h`),
+      this.formatDetailLine('Antal loggar', this.formatNumber(report.totalWorklogs ?? 0)),
+      this.formatDetailLine('Issues', this.formatNumber(report.uniqueTaskCount ?? 0)),
+    ];
+
+    if (Array.isArray(report.tasks) && report.tasks.length > 0) {
+      lines.push('');
+      lines.push('  Issues:');
+      for (const task of report.tasks) {
+        const issueKey = this.escapeMrkdwn(task.issueKey || `ISSUE-${task.issueId || ''}`);
+        const issueType = this.escapeMrkdwn(task.issueType || 'Issue');
+        const title = this.escapeMrkdwn(task.title || 'Okänd task');
+        const hours = this.formatNumber(task.totalHours ?? 0);
+        const worklogs = this.formatNumber(task.worklogCount ?? 0);
+        lines.push(`    - ${this.formatInlineCode(`${issueKey} [${issueType}] ${title}: ${hours} h (${worklogs} loggar)`)}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  formatWeeklyTeamReport(report) {
+    if (!report || typeof report !== 'object') {
+      return this.formatPlainLinesAsBullets(report);
+    }
+
+    const lines = [
+      `• 👥 ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
+      this.formatDetailLine('Period', this.escapeMrkdwn(report.period?.label || 'okänd period')),
+      this.formatDetailLine('Total tid', `${this.formatNumber(report.totalHours ?? 0)} h`),
+      this.formatDetailLine('Antal loggar', this.formatNumber(report.totalWorklogs ?? 0)),
+      this.formatDetailLine('Personer', this.formatNumber(report.participantCount ?? 0)),
+    ];
+
+    if (Array.isArray(report.participants) && report.participants.length > 0) {
+      lines.push('');
+      lines.push('  Team:');
+      for (const person of report.participants) {
+        const name = this.escapeMrkdwn(person.name || `User ${person.userId || ''}`);
+        const email = person.email ? ` (${this.escapeMrkdwn(person.email)})` : '';
+        const hours = this.formatNumber(person.totalHours ?? 0);
+        lines.push(`    - ${this.formatInlineCode(`${name}${email}: ${hours} h`)}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   formatProjectList(projects) {
     if (!Array.isArray(projects)) {
       return this.formatPlainLinesAsBullets(projects);
@@ -326,6 +382,14 @@ class OutputFormatter {
 
     if (commandName === 'project team') {
       return this.formatProjectParticipants(parsedOutput);
+    }
+
+    if (commandName === 'report w' || commandName === 'report m') {
+      return this.formatWeeklyReport(parsedOutput);
+    }
+
+    if (commandName === 'report wt' || commandName === 'report mt') {
+      return this.formatWeeklyTeamReport(parsedOutput);
     }
 
     if (commandName === 'projects') {

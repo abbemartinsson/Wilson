@@ -17,6 +17,7 @@ const {
 } = require('./constants');
 const RoleAccessService = require('./services/RoleAccessService');
 const OutputFormatter = require('./services/OutputFormatter');
+const PDFReportFormatter = require('./services/PDFReportFormatter');
 const UserCostSetupFlow = require('./flows/UserCostSetupFlow');
 const WorklogSetupFlow = require('./flows/WorklogSetupFlow');
 const TimesheetReminderSetupFlow = require('./flows/TimesheetReminderSetupFlow');
@@ -43,6 +44,7 @@ class SlackCommandController {
     });
 
     this.formatter = new OutputFormatter({ maxOutputChars: MAX_OUTPUT_CHARS });
+    this.pdfFormatter = new PDFReportFormatter();
 
     this.userCostFlow = new UserCostSetupFlow({
       userRepository,
@@ -153,6 +155,29 @@ class SlackCommandController {
     await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
   }
 
+  async uploadPDFFile(client, channel, pdfStream, filename, title, threadTs) {
+    try {
+      const response = await client.files.uploadV2({
+        channel_id: channel,
+        file: pdfStream,
+        filename,
+        title,
+        thread_ts: threadTs,
+      });
+      return response;
+    } catch (error) {
+      // If it's a scope error, throw a more helpful message
+      if (error.message && error.message.includes('missing_scope')) {
+        throw new Error('Bot saknar files:write scope. Lägg till scope i Slack app settings och reinstallera appen.');
+      }
+      this.logger.error('Failed to upload PDF file', {
+        error: error.message,
+        filename,
+      });
+      throw error;
+    }
+  }
+
   parseOptionalMonths(inputText) {
     if (!inputText) {
       return { ok: true, value: undefined };
@@ -248,26 +273,71 @@ class SlackCommandController {
       .replace(/-/g, ' ')
       .toLowerCase();
 
-    if (!withoutPrefix) {
+    const aliasedCommandText = withoutPrefix
+      .replace(/^report\s+montly\b/, 'report m')
+      .replace(/^report\s+monthly\s+team\b/, 'report mt')
+      .replace(/^report\s+weekly\s+team\b/, 'report wt')
+      .replace(/^report\s+monthly\b/, 'report m')
+      .replace(/^report\s+weekly\b/, 'report w');
+
+    if (!aliasedCommandText) {
       return { commandName: '', commandText: '' };
     }
 
     const commandNames = Object.keys(this.commandMap).sort((left, right) => right.split(' ').length - left.split(' ').length);
 
     for (const commandName of commandNames) {
-      if (withoutPrefix === commandName || withoutPrefix.startsWith(`${commandName} `)) {
+      if (aliasedCommandText === commandName || aliasedCommandText.startsWith(`${commandName} `)) {
         return {
           commandName,
-          commandText: withoutPrefix.slice(commandName.length).trim(),
+          commandText: aliasedCommandText.slice(commandName.length).trim(),
         };
       }
     }
 
-    const [commandNameRaw, ...rest] = withoutPrefix.split(' ');
+    const [commandNameRaw, ...rest] = aliasedCommandText.split(' ');
     return {
       commandName: commandNameRaw,
       commandText: rest.join(' '),
     };
+  }
+
+  parseMonthlyReportInput(inputText) {
+    const normalizedInput = String(inputText || '').trim();
+    if (!normalizedInput) {
+      return { projectInput: normalizedInput, monthNumber: null };
+    }
+
+    const inputParts = normalizedInput.split(/\s+/);
+    if (inputParts.length < 2) {
+      return { projectInput: normalizedInput, monthNumber: null };
+    }
+
+    const tryParseMonthToken = (token) => {
+      const parsedMonth = this.parseHistoricalMonth(token);
+      if (parsedMonth.ok && parsedMonth.value) {
+        return parsedMonth.value;
+      }
+      return null;
+    };
+
+    const trailingMonth = tryParseMonthToken(inputParts[inputParts.length - 1]);
+    if (trailingMonth) {
+      return {
+        projectInput: inputParts.slice(0, -1).join(' ').trim(),
+        monthNumber: trailingMonth,
+      };
+    }
+
+    const leadingMonth = tryParseMonthToken(inputParts[0]);
+    if (leadingMonth) {
+      return {
+        projectInput: inputParts.slice(1).join(' ').trim(),
+        monthNumber: leadingMonth,
+      };
+    }
+
+    return { projectInput: normalizedInput, monthNumber: null };
   }
 
   normalizeProjectInput(value = '') {
@@ -320,7 +390,14 @@ class SlackCommandController {
 
   runReportingScript(scriptCommand, scriptArgument) {
     const args = [REPORTING_SCRIPT_PATH, scriptCommand];
-    if (scriptArgument) {
+
+    if (Array.isArray(scriptArgument)) {
+      for (const arg of scriptArgument) {
+        if (arg !== undefined && arg !== null && String(arg).trim() !== '') {
+          args.push(String(arg));
+        }
+      }
+    } else if (scriptArgument) {
       args.push(scriptArgument);
     }
 
@@ -492,6 +569,7 @@ class SlackCommandController {
 
     const inputText = this.sanitizeInput(parsed.commandText);
     let scriptArgument = inputText || undefined;
+    let projectInputForResolution = inputText;
 
     if (config.requiresText && !inputText) {
       const messages = this.buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${roleAwareHelpMessage}`, true);
@@ -501,26 +579,70 @@ class SlackCommandController {
       return true;
     }
 
-    if (parsed.commandName === 'project info' || parsed.commandName === 'project last week' || parsed.commandName === 'project cost') {
-      const resolvedProject = await this.resolveProjectKey(inputText);
+    if (
+      parsed.commandName === 'project info' ||
+      parsed.commandName === 'project last week' ||
+      parsed.commandName === 'project cost' ||
+      parsed.commandName === 'report w' ||
+      parsed.commandName === 'report m' ||
+      parsed.commandName === 'report wt' ||
+      parsed.commandName === 'report mt'
+    ) {
+      const isMonthlyReportCommand =
+        parsed.commandName === 'report m' || parsed.commandName === 'report mt';
+      const parsedMonthlyInput = isMonthlyReportCommand ? this.parseMonthlyReportInput(inputText) : null;
 
-      if (!resolvedProject) {
-        const messages = this.buildMultiMessagePayload(
-          'Project not found',
-          `No project matched "${inputText}".\n\n${roleAwareHelpMessage}`,
-          true
-        );
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
-        }
-        return true;
+      const projectInputCandidates = [projectInputForResolution];
+      if (
+        parsedMonthlyInput &&
+        parsedMonthlyInput.projectInput &&
+        parsedMonthlyInput.projectInput !== projectInputForResolution
+      ) {
+        projectInputCandidates.push(parsedMonthlyInput.projectInput);
       }
 
-      if (resolvedProject.matchedBy === 'multiple') {
-        const options = this.formatProjectOptions(resolvedProject.candidates);
+      let resolvedProject = null;
+      let resolvedFromInput = projectInputForResolution;
+      let firstMultipleMatch = null;
+
+      for (const candidateInput of projectInputCandidates) {
+        const candidateResolution = await this.resolveProjectKey(candidateInput);
+        if (!candidateResolution) {
+          continue;
+        }
+
+        if (candidateResolution.matchedBy === 'multiple') {
+          if (!firstMultipleMatch) {
+            firstMultipleMatch = {
+              input: candidateInput,
+              resolution: candidateResolution,
+            };
+          }
+          continue;
+        }
+
+        resolvedProject = candidateResolution;
+        resolvedFromInput = candidateInput;
+        break;
+      }
+
+      if (!resolvedProject) {
+        if (firstMultipleMatch) {
+          const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
+          const messages = this.buildMultiMessagePayload(
+            'Multiple projects matched',
+            `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
+            true
+          );
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
+          }
+          return true;
+        }
+
         const messages = this.buildMultiMessagePayload(
-          'Multiple projects matched',
-          `Please be more specific. I found these matches for "${inputText}":\n${options}\n\n${roleAwareHelpMessage}`,
+          'Project not found',
+          `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
           true
         );
         for (const message of messages) {
@@ -530,6 +652,40 @@ class SlackCommandController {
       }
 
       scriptArgument = resolvedProject.projectKey;
+
+      if (parsed.commandName === 'report w') {
+        scriptArgument = [resolvedProject.projectKey, 'week'];
+      }
+
+      if (parsed.commandName === 'report m') {
+        const monthNumber =
+          isMonthlyReportCommand &&
+          parsedMonthlyInput &&
+          parsedMonthlyInput.projectInput === resolvedFromInput
+            ? parsedMonthlyInput.monthNumber
+            : null;
+
+        scriptArgument = monthNumber
+          ? [resolvedProject.projectKey, 'month', monthNumber]
+          : [resolvedProject.projectKey, 'month'];
+      }
+
+      if (parsed.commandName === 'report wt') {
+        scriptArgument = [resolvedProject.projectKey, 'week'];
+      }
+
+      if (parsed.commandName === 'report mt') {
+        const monthNumber =
+          isMonthlyReportCommand &&
+          parsedMonthlyInput &&
+          parsedMonthlyInput.projectInput === resolvedFromInput
+            ? parsedMonthlyInput.monthNumber
+            : null;
+
+        scriptArgument = monthNumber
+          ? [resolvedProject.projectKey, 'month', monthNumber]
+          : [resolvedProject.projectKey, 'month'];
+      }
     }
 
     if (config.inputMode === 'optional-months') {
@@ -568,8 +724,56 @@ class SlackCommandController {
       hasInput: Boolean(inputText),
     });
 
+    const isReportCommand = [
+      'report w',
+      'report m',
+      'report wt',
+      'report mt',
+    ].includes(parsed.commandName);
+
+    const isTeamReportCommand = ['report wt', 'report mt'].includes(parsed.commandName);
+
     try {
       const result = await this.runReportingScript(config.scriptCommand, scriptArgument);
+
+      // Handle report commands with PDF generation
+      if (isReportCommand) {
+        try {
+          const reportData = this.formatter.extractJsonPayload(result.stdout);
+          if (!reportData || typeof reportData !== 'object') {
+            const errorMessage = this.buildPlainMessagePayload(
+              '⚠️ Rapporten kunde inte konverteras till PDF. Försök igen senare.'
+            );
+            await this.postSlackMessage(client, channel, errorMessage, threadTs);
+            return true;
+          }
+
+          const pdfStream = isTeamReportCommand
+            ? this.pdfFormatter.generateTeamReportPDF(reportData)
+            : this.pdfFormatter.generateWeeklyReportPDF(reportData);
+
+          const period = reportData.period?.label || 'Report';
+          const projectKey = reportData.projectKey || 'PROJECT';
+          const filename = `${projectKey}-${parsed.commandName.replace(/ /g, '-')}-${Date.now()}.pdf`;
+          const title = `${reportData.projectName || projectKey} - ${period}`;
+
+          // Upload only PDF for report commands.
+          await this.uploadPDFFile(client, channel, pdfStream, filename, title, threadTs);
+          return true;
+        } catch (pdfError) {
+          logger.warn('PDF generation/upload failed', {
+            error: pdfError.message,
+          });
+
+          const errorMessage = this.buildPlainMessagePayload(
+            `⚠️ PDF-uppladdning misslyckades: ${pdfError.message || 'Okänt fel.'}`
+          );
+          await this.postSlackMessage(client, channel, errorMessage, threadTs);
+          return true;
+        }
+      }
+
+      // Regular command handling
       const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
       const stderrRaw = String(result.stderr || '').trim();
       const stderr = stderrRaw ? this.formatter.clipText(this.formatter.formatPlainLinesAsBullets(stderrRaw)) : '';

@@ -32,6 +32,48 @@ class JiraClient {
     return resp.data; // should be an array
   }
 
+  async fetchIssueTypesByKeys(issueKeys = []) {
+    const normalizedKeys = Array.from(
+      new Set(
+        issueKeys
+          .map((key) => String(key || '').trim().toUpperCase())
+          .filter(Boolean)
+      )
+    );
+
+    if (normalizedKeys.length === 0) {
+      return new Map();
+    }
+
+    const result = new Map();
+
+    for (const keyChunk of chunkArray(normalizedKeys, 50)) {
+      const jql = `issueKey in (${keyChunk.map((key) => `"${key}"`).join(', ')})`;
+      const response = await this.http.get('/rest/api/3/search/jql', {
+        params: {
+          jql,
+          maxResults: keyChunk.length,
+          fields: 'issuetype,key',
+        },
+      });
+
+      const issues = response.data?.issues || [];
+      for (const issue of issues) {
+        const issueKey = String(issue?.key || '').trim().toUpperCase();
+        if (!issueKey) {
+          continue;
+        }
+
+        result.set(issueKey, {
+          issueTypeName: String(issue?.fields?.issuetype?.name || '').trim(),
+          isSubtask: Boolean(issue?.fields?.issuetype?.subtask),
+        });
+      }
+    }
+
+    return result;
+  }
+
   /**
    * Fetch all Jira users.
    * Returns an array of user objects as Jira delivers them.
@@ -83,6 +125,14 @@ class JiraClient {
 
     return allIssues;
   }
+}
+
+function chunkArray(values, chunkSize) {
+  const chunks = [];
+  for (let i = 0; i < values.length; i += chunkSize) {
+    chunks.push(values.slice(i, i + chunkSize));
+  }
+  return chunks;
 }
 
 module.exports = new JiraClient();

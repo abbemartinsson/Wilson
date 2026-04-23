@@ -33,6 +33,26 @@ const commandMap = {
     requiresText: true,
     usage: '!project team <project_key_or_name>',
   },
+  'report w': {
+    scriptCommand: 'project-worklog-report',
+    requiresText: true,
+    usage: '!report w <project_key_or_name>',
+  },
+  'report m': {
+    scriptCommand: 'project-worklog-report',
+    requiresText: true,
+    usage: '!report m <project_key_or_name> [month]',
+  },
+  'report wt': {
+    scriptCommand: 'project-worklog-team-report',
+    requiresText: true,
+    usage: '!report wt <project_key_or_name>',
+  },
+  'report mt': {
+    scriptCommand: 'project-worklog-team-report',
+    requiresText: true,
+    usage: '!report mt <project_key_or_name> [month]',
+  },
   projects: {
     scriptCommand: 'list-projects',
     requiresText: false,
@@ -86,11 +106,32 @@ const ROLE_PERMISSION_CONFIG = {
       'reminder hours',
     ],
   },
+  'project manager': {
+    commands: [
+      'help',
+      'project info',
+      'project last week',
+      'report w',
+      'report m',
+      'report wt',
+      'report mt',
+      'projects',
+      'forecast',
+      'project team',
+      'history',
+      'worklog',
+      'reminder setup',
+      'reminder update',
+      'reminder status',
+      'reminder hours',
+    ],
+  },
 };
 
 const ROLE_LABELS = {
   admin: 'Admin',
   member: 'Medlem',
+  'project manager': 'Project manager',
 };
 
 const COMMAND_USAGE_TEXT = {
@@ -98,6 +139,10 @@ const COMMAND_USAGE_TEXT = {
   'project info': '!project info <key_or_name>',
   'project last week': '!project last week <key_or_name>',
   'project cost': '!project cost <key_or_name>',
+  'report w': '!report w <project_key_or_name>',
+  'report m': '!report m <project_key_or_name> [month]',
+  'report wt': '!report wt <project_key_or_name>',
+  'report mt': '!report mt <project_key_or_name> [month]',
   'user cost': '!user cost <förnamn>',
   worklog: '!worklog',
   'project team': '!project team <key_or_name>',
@@ -115,6 +160,10 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   'project info': 'Visar projektets data.',
   'project last week': 'Visar timmar förra veckan.',
   'project cost': 'Visar projektets totalkostnad.',
+  'report w': 'Visar loggad tid för alla issues senaste veckan.',
+  'report m': 'Visar loggad tid för alla issues senaste månaden.',
+  'report wt': 'Visar vilka som jobbat och hur mycket på alla issues senaste veckan.',
+  'report mt': 'Visar vilka som jobbat och hur mycket på alla issues senaste månaden.',
   'user cost': 'Sätter en users kostnad per timme.',
   worklog: 'Loggar tid på ett av dina issues.',
   'project team': 'Visar vilka som jobbat.',
@@ -131,7 +180,16 @@ const HELP_COMMAND_GROUPS = [
   {
     title: 'Projekt',
     emoji: '📁',
-    commands: ['project info', 'project last week', 'project team', 'projects'],
+    commands: [
+      'project info',
+      'project last week',
+      'report w',
+      'report m',
+      'report wt',
+      'report mt',
+      'project team',
+      'projects',
+    ],
   },
   {
     title: 'Prognos och historik',
