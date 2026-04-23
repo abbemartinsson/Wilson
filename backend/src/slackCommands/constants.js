@@ -183,13 +183,14 @@ const HELP_COMMAND_GROUPS = [
     commands: [
       'project info',
       'project last week',
-      'report w',
-      'report m',
-      'report wt',
-      'report mt',
       'project team',
       'projects',
     ],
+  },
+  {
+    title: 'Rapporter',
+    emoji: '🧾',
+    commands: ['report w', 'report m', 'report wt', 'report mt'],
   },
   {
     title: 'Prognos och historik',

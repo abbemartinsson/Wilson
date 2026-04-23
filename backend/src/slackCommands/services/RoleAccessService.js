@@ -90,6 +90,7 @@ class RoleAccessService {
       }
 
       visibleCommands.forEach((commandName) => usedCommandNames.add(commandName));
+
       helpLines.push(`• ${group.emoji} *${group.title}:*`);
       for (const commandName of visibleCommands) {
         const usage = this.commandUsageText[commandName] || this.commandMap[commandName]?.usage || commandName;
