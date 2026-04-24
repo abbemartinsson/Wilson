@@ -70,7 +70,7 @@ function askPythonRouter(messages) {
 
       try {
         const parsed = JSON.parse(trimmedOutput);
-        resolve(parsed.answer || 'Jag kunde inte skapa ett svar just nu.');
+        resolve(parsed.answer || 'I could not generate a response right now.');
       } catch (error) {
         reject(new Error(`Invalid JSON from Python router: ${error.message}`));
       }

@@ -14,16 +14,16 @@ class UserCostSetupFlow {
       .replace(/\s+/g, '');
 
     if (!normalized) {
-      return { ok: false, message: 'Skriv ett belopp i kr/timme.' };
+      return { ok: false, message: 'Enter an amount in SEK/hour.' };
     }
 
     if (!/^-?\d+(?:[.,]\d+)?$/.test(normalized)) {
-      return { ok: false, message: 'Jag kunde inte läsa beloppet. Skriv ett tal, till exempel 350 eller 350,50.' };
+      return { ok: false, message: 'I could not parse the amount. Enter a number, for example 350 or 350.50.' };
     }
 
     const value = Number.parseFloat(normalized.replace(',', '.'));
     if (!Number.isFinite(value) || value <= 0) {
-      return { ok: false, message: 'Beloppet måste vara ett tal större än 0.' };
+      return { ok: false, message: 'The amount must be a number greater than 0.' };
     }
 
     return { ok: true, value: Math.round(value * 100) / 100 };
@@ -32,23 +32,23 @@ class UserCostSetupFlow {
   formatUserCostValue(value) {
     const numericValue = Number(value);
     if (Number.isNaN(numericValue)) {
-      return 'okänd';
+      return 'unknown';
     }
 
-    return `${this.formatter.formatCurrency(numericValue)}/timme`;
+    return `${this.formatter.formatCurrency(numericValue)}/hour`;
   }
 
   formatUserCostCandidate(user, index) {
-    const name = this.formatter.escapeMrkdwn(user.name || 'Okänd');
+    const name = this.formatter.escapeMrkdwn(user.name || 'Unknown');
     const email = user.email ? ` (${this.formatter.escapeMrkdwn(user.email)})` : '';
-    const currentCost = user.cost != null ? ` - nuvarande ${this.formatUserCostValue(user.cost)}` : ' - ingen cost satt';
+    const currentCost = user.cost != null ? ` - current ${this.formatUserCostValue(user.cost)}` : ' - no cost set';
     return `${index}. ${name}${email}${currentCost}`;
   }
 
   buildSelectionMessage(firstName, candidates) {
     const lines = [
-      `Jag hittade flera users med förnamnet *${this.formatter.escapeMrkdwn(firstName)}*.`,
-      'Svara med numret för rätt person, eller skriv `!cancel` för att avbryta.',
+      `I found multiple users with the first name *${this.formatter.escapeMrkdwn(firstName)}*.`,
+      'Reply with the number for the correct person, or type `!cancel` to abort.',
       '',
     ];
 
@@ -60,18 +60,18 @@ class UserCostSetupFlow {
   }
 
   buildAmountMessage(user) {
-    const name = this.formatter.escapeMrkdwn(user.name || 'Okänd');
+    const name = this.formatter.escapeMrkdwn(user.name || 'Unknown');
     return [
-      `Hur mycket kostar *${name}* per timme?`,
-      'Svara med ett belopp i kr/timme, till exempel `350` eller `350,50`.',
-      'Skriv `!cancel` om du vill avbryta.',
+      `What is the hourly cost for *${name}*?`,
+      'Reply with an amount in SEK/hour, for example `350` or `350.50`.',
+      'Type `!cancel` if you want to abort.',
     ].join('\n');
   }
 
   async start({ text, channel, client, threadTs, slackUserId, sanitizeInput }) {
     const firstName = sanitizeInput(text).split(' ')[0];
     if (!firstName) {
-      await this.sendMessage(client, channel, 'Usage: !user cost <förnamn>', threadTs, true);
+      await this.sendMessage(client, channel, 'Usage: !user cost <first_name>', threadTs, true);
       return true;
     }
 
@@ -81,7 +81,7 @@ class UserCostSetupFlow {
       await this.sendMessage(
         client,
         channel,
-        `Jag hittade ingen user med förnamnet *${this.formatter.escapeMrkdwn(firstName)}*.`,
+        `I could not find a user with the first name *${this.formatter.escapeMrkdwn(firstName)}*.`,
         threadTs,
         true
       );
@@ -138,7 +138,7 @@ class UserCostSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          `Svara med ett nummer mellan 1 och ${state.candidates.length}, eller skriv !cancel för att avbryta.`,
+          `Reply with a number between 1 and ${state.candidates.length}, or type !cancel to abort.`,
           threadTs,
           true
         );
@@ -166,7 +166,7 @@ class UserCostSetupFlow {
 
       const updatedUser = await this.userRepository.updateUserCostById(state.user.id, parsedCost.value);
       if (!updatedUser) {
-        await this.sendMessage(client, replyChannel, 'Jag kunde inte uppdatera cost på den usern.', threadTs, true);
+        await this.sendMessage(client, replyChannel, 'I could not update the cost for that user.', threadTs, true);
         return true;
       }
 
@@ -174,7 +174,7 @@ class UserCostSetupFlow {
       await this.sendMessage(
         client,
         replyChannel,
-        `Sparat: *${this.formatter.escapeMrkdwn(updatedUser.name || state.user.name || 'Okänd')}* kostar nu ${this.formatUserCostValue(parsedCost.value)}.`,
+        `Saved: *${this.formatter.escapeMrkdwn(updatedUser.name || state.user.name || 'Unknown')}* now costs ${this.formatUserCostValue(parsedCost.value)}.`,
         threadTs
       );
       return true;

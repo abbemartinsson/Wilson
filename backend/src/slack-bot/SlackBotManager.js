@@ -37,11 +37,11 @@ class SlackBotManager {
       if (this.config.useSocketMode) {
         await this.app.start();
         this.isRunning = true;
-        this.logger.log('Slack bot kör i Socket Mode (ingen ngrok behövs)');
+        this.logger.log('Slack bot is running in Socket Mode (no ngrok needed)');
       } else {
         await this.app.start(process.env.PORT || 3000);
         this.isRunning = true;
-        this.logger.log(`Slack bot kör på port ${process.env.PORT || 3000}`);
+        this.logger.log(`Slack bot is running on port ${process.env.PORT || 3000}`);
       }
 
       this.logger.log('Python chatbot-router is enabled for Slack replies.');
@@ -62,7 +62,7 @@ class SlackBotManager {
     if (this.restartTimer) return;
 
     this.logger.warn(
-      `Socket problem upptäckt (${reason}). Försöker återansluta om ${this.config.restartDelayMs} ms...`
+      `Socket problem detected (${reason}). Reconnecting in ${this.config.restartDelayMs} ms...`
     );
 
     this.restartTimer = setTimeout(async () => {
@@ -73,7 +73,7 @@ class SlackBotManager {
           await this.stop();
         }
       } catch (stopError) {
-        this.logger.error('Kunde inte stoppa Slack-app innan restart:', stopError.message);
+        this.logger.error('Could not stop Slack app before restart:', stopError.message);
       } finally {
         this.isRunning = false;
       }
@@ -81,7 +81,7 @@ class SlackBotManager {
       try {
         await this.start();
       } catch (startError) {
-        this.logger.error('Återanslutning misslyckades:', startError);
+        this.logger.error('Reconnect failed:', startError);
         this.scheduleRestart('retry');
       }
     }, this.config.restartDelayMs);

@@ -87,7 +87,7 @@ class OutputFormatter {
       .filter(Boolean);
 
     if (lines.length === 0) {
-      return '• Inga resultat';
+      return '• No results';
     }
 
     return lines.map((line) => `• ${this.escapeMrkdwn(line)}`).join('\n');
@@ -99,17 +99,17 @@ class OutputFormatter {
     }
 
     const lines = [
-      `• 📁 ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'Okänd nyckel')})`,
-      this.formatDetailLine('Timmar totalt', `${this.formatNumber(report.totalHours ?? 0)} h`),
-      this.formatDetailLine('Arbetare', this.formatNumber(report.contributorsCount ?? 0)),
+      `• 📁 ${this.escapeMrkdwn(report.projectName || 'Unknown project')} (${this.escapeMrkdwn(report.projectKey || 'Unknown key')})`,
+      this.formatDetailLine('Total hours', `${this.formatNumber(report.totalHours ?? 0)} h`),
+      this.formatDetailLine('Contributors', this.formatNumber(report.contributorsCount ?? 0)),
     ];
 
     if (report.startDate) {
-      lines.push(this.formatDetailLine('Startdatum', this.escapeMrkdwn(this.formatDateOnly(report.startDate))));
+      lines.push(this.formatDetailLine('Start date', this.escapeMrkdwn(this.formatDateOnly(report.startDate))));
     }
 
     if (report.lastLoggedIssue) {
-      lines.push(this.formatDetailLine('Senaste logg', this.escapeMrkdwn(this.formatDateOnly(report.lastLoggedIssue))));
+      lines.push(this.formatDetailLine('Last log', this.escapeMrkdwn(this.formatDateOnly(report.lastLoggedIssue))));
     }
 
     return lines.join('\n');
@@ -121,12 +121,12 @@ class OutputFormatter {
     }
 
     const lines = [
-      `• ⏱️ ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
-      this.formatDetailLine('Timmar', `${this.formatNumber(report.totalHours ?? 0)} h`),
+      `• ⏱️ ${this.escapeMrkdwn(report.projectName || 'Unknown project')} (${this.escapeMrkdwn(report.projectKey || 'unknown key')})`,
+      this.formatDetailLine('Hours', `${this.formatNumber(report.totalHours ?? 0)} h`),
     ];
 
     if (report.formattedDuration) {
-      lines.push(this.formatDetailLine('Tid', this.escapeMrkdwn(report.formattedDuration)));
+      lines.push(this.formatDetailLine('Time', this.escapeMrkdwn(report.formattedDuration)));
     }
 
     if (report.period?.label) {
@@ -142,36 +142,36 @@ class OutputFormatter {
     }
 
     const lines = [
-      `• 💰 ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
-      this.formatDetailLine('Timmar', `${this.formatNumber(report.totalHours ?? 0)} h`),
-      this.formatDetailLine('Totalkostnad', this.formatCurrency(report.totalCost ?? 0)),
-      this.formatDetailLine('Deltagare', this.formatNumber(report.participantCount ?? 0)),
+      `• 💰 ${this.escapeMrkdwn(report.projectName || 'Unknown project')} (${this.escapeMrkdwn(report.projectKey || 'unknown key')})`,
+      this.formatDetailLine('Hours', `${this.formatNumber(report.totalHours ?? 0)} h`),
+      this.formatDetailLine('Total cost', this.formatCurrency(report.totalCost ?? 0)),
+      this.formatDetailLine('Participants', this.formatNumber(report.participantCount ?? 0)),
     ];
 
     if (report.missingCostCount > 0) {
-      lines.push(this.formatDetailLine('Saknar cost', this.formatNumber(report.missingCostCount)));
+      lines.push(this.formatDetailLine('Missing cost', this.formatNumber(report.missingCostCount)));
     }
 
     if (Array.isArray(report.participants) && report.participants.length > 0) {
       lines.push('');
-      lines.push('  Kostnadsfördelning:');
+      lines.push('  Cost breakdown:');
 
       for (const participant of report.participants) {
-        const name = this.escapeMrkdwn(participant.name || 'Okänd');
+        const name = this.escapeMrkdwn(participant.name || 'Unknown');
         const email = participant.email ? ` (${this.escapeMrkdwn(participant.email)})` : '';
         const hours = this.formatNumber(participant.totalHours ?? 0);
-        const rate = participant.costPerHour != null ? `${this.formatNumber(participant.costPerHour)} kr/h` : 'cost saknas';
-        const totalCost = participant.totalCost != null ? this.formatCurrency(participant.totalCost) : 'kostnad saknas';
+        const rate = participant.costPerHour != null ? `${this.formatNumber(participant.costPerHour)} kr/h` : 'cost missing';
+        const totalCost = participant.totalCost != null ? this.formatCurrency(participant.totalCost) : 'cost missing';
         lines.push(`    - ${this.formatInlineCode(`${name}${email}: ${hours} h, ${rate}, ${totalCost}`)}`);
       }
     }
 
     if (Array.isArray(report.missingCostUsers) && report.missingCostUsers.length > 0) {
       lines.push('');
-      lines.push('  Användare utan cost:');
+      lines.push('  Users without cost:');
 
       for (const user of report.missingCostUsers) {
-        const name = this.escapeMrkdwn(user.name || 'Okänd');
+        const name = this.escapeMrkdwn(user.name || 'Unknown');
         const email = user.email ? ` (${this.escapeMrkdwn(user.email)})` : '';
         lines.push(`    - ${this.formatInlineCode(`${name}${email}: ${this.formatNumber(user.totalHours ?? 0)} h`)}`);
       }
@@ -179,7 +179,7 @@ class OutputFormatter {
 
     if (report.missingCostCount > 0) {
       lines.push('');
-      lines.push('  Obs: totalen är ett minimum eftersom vissa users saknar cost.');
+      lines.push('  Note: total cost is a minimum because some users are missing cost values.');
     }
 
     return lines.join('\n');
@@ -191,15 +191,15 @@ class OutputFormatter {
     }
 
     const lines = [
-      `• 👥 ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
-      this.formatDetailLine('Antal deltagare', this.formatNumber(report.totalParticipants ?? 0)),
+      `• 👥 ${this.escapeMrkdwn(report.projectName || 'Unknown project')} (${this.escapeMrkdwn(report.projectKey || 'unknown key')})`,
+      this.formatDetailLine('Participant count', this.formatNumber(report.totalParticipants ?? 0)),
     ];
 
     if (Array.isArray(report.participants) && report.participants.length > 0) {
       lines.push('');
-      lines.push('  Deltagare:');
+      lines.push('  Participants:');
       for (const participant of report.participants) {
-        const name = this.escapeMrkdwn(participant.name || 'Okänd');
+        const name = this.escapeMrkdwn(participant.name || 'Unknown');
         const hours = this.formatNumber(participant.totalHours ?? 0);
         const email = participant.email ? ` (${this.escapeMrkdwn(participant.email)})` : '';
         lines.push(`    - ${this.formatInlineCode(`${name}${email}: ${hours} h`)}`);
@@ -215,10 +215,10 @@ class OutputFormatter {
     }
 
     const lines = [
-      `• 🗓️ ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
-      this.formatDetailLine('Period', this.escapeMrkdwn(report.period?.label || 'okänd period')),
-      this.formatDetailLine('Total tid', `${this.formatNumber(report.totalHours ?? 0)} h`),
-      this.formatDetailLine('Antal loggar', this.formatNumber(report.totalWorklogs ?? 0)),
+      `• 🗓️ ${this.escapeMrkdwn(report.projectName || 'Unknown project')} (${this.escapeMrkdwn(report.projectKey || 'unknown key')})`,
+      this.formatDetailLine('Period', this.escapeMrkdwn(report.period?.label || 'unknown period')),
+      this.formatDetailLine('Total time', `${this.formatNumber(report.totalHours ?? 0)} h`),
+      this.formatDetailLine('Worklogs', this.formatNumber(report.totalWorklogs ?? 0)),
       this.formatDetailLine('Issues', this.formatNumber(report.uniqueTaskCount ?? 0)),
     ];
 
@@ -228,10 +228,10 @@ class OutputFormatter {
       for (const task of report.tasks) {
         const issueKey = this.escapeMrkdwn(task.issueKey || `ISSUE-${task.issueId || ''}`);
         const issueType = this.escapeMrkdwn(task.issueType || 'Issue');
-        const title = this.escapeMrkdwn(task.title || 'Okänd task');
+        const title = this.escapeMrkdwn(task.title || 'Unknown task');
         const hours = this.formatNumber(task.totalHours ?? 0);
         const worklogs = this.formatNumber(task.worklogCount ?? 0);
-        lines.push(`    - ${this.formatInlineCode(`${issueKey} [${issueType}] ${title}: ${hours} h (${worklogs} loggar)`)}`);
+        lines.push(`    - ${this.formatInlineCode(`${issueKey} [${issueType}] ${title}: ${hours} h (${worklogs} worklogs)`)}`);
       }
     }
 
@@ -244,11 +244,11 @@ class OutputFormatter {
     }
 
     const lines = [
-      `• 👥 ${this.escapeMrkdwn(report.projectName || 'Okänt projekt')} (${this.escapeMrkdwn(report.projectKey || 'okänd nyckel')})`,
-      this.formatDetailLine('Period', this.escapeMrkdwn(report.period?.label || 'okänd period')),
-      this.formatDetailLine('Total tid', `${this.formatNumber(report.totalHours ?? 0)} h`),
-      this.formatDetailLine('Antal loggar', this.formatNumber(report.totalWorklogs ?? 0)),
-      this.formatDetailLine('Personer', this.formatNumber(report.participantCount ?? 0)),
+      `• 👥 ${this.escapeMrkdwn(report.projectName || 'Unknown project')} (${this.escapeMrkdwn(report.projectKey || 'unknown key')})`,
+      this.formatDetailLine('Period', this.escapeMrkdwn(report.period?.label || 'unknown period')),
+      this.formatDetailLine('Total time', `${this.formatNumber(report.totalHours ?? 0)} h`),
+      this.formatDetailLine('Worklogs', this.formatNumber(report.totalWorklogs ?? 0)),
+      this.formatDetailLine('People', this.formatNumber(report.participantCount ?? 0)),
     ];
 
     if (Array.isArray(report.participants) && report.participants.length > 0) {
@@ -271,14 +271,14 @@ class OutputFormatter {
     }
 
     if (projects.length === 0) {
-      return '• 📋 Aktiva projekt\n  Inga projekt hittades';
+      return '• 📋 Active projects\n  No projects found';
     }
 
-    const lines = [`• 📋 Aktiva projekt (${projects.length} totalt)`, ''];
+    const lines = [`• 📋 Active projects (${projects.length} total)`, ''];
 
     for (const project of projects) {
-      const key = this.escapeMrkdwn(project.projectKey || 'okänd nyckel');
-      const name = this.escapeMrkdwn(project.projectName || 'Okänt projekt');
+      const key = this.escapeMrkdwn(project.projectKey || 'unknown key');
+      const name = this.escapeMrkdwn(project.projectName || 'Unknown project');
       lines.push(`  - ${this.formatInlineCode(`${name} (${key})`)}`);
     }
 
@@ -295,19 +295,19 @@ class OutputFormatter {
     }
 
     if (monthlyForecast.length === 0) {
-      return '• 📈 Prognos\n  Ingen prognos hittades';
+      return '• 📈 Forecast\n  No forecast found';
     }
 
     return monthlyForecast
       .map((item) => {
-        const month = this.escapeMrkdwn(item.month || 'okänd månad');
+        const month = this.escapeMrkdwn(item.month || 'unknown month');
         const predicted = this.formatNumber(item.predicted_hours ?? 0);
         const lowerBound = this.formatNumber(item.lower_bound ?? 0);
         const upperBound = this.formatNumber(item.upper_bound ?? 0);
         return [
           `• 📈 ${month}`,
-          `  - ${this.formatInlineCode(`Prognos: ${predicted} h`)}`,
-          `  - ${this.formatInlineCode(`Intervall: ${lowerBound}-${upperBound} h`)}`,
+          `  - ${this.formatInlineCode(`Forecast: ${predicted} h`)}`,
+          `  - ${this.formatInlineCode(`Range: ${lowerBound}-${upperBound} h`)}`,
         ].join('\n');
       })
       .join('\n\n');
@@ -321,31 +321,31 @@ class OutputFormatter {
     const lines = [];
 
     if (report.current_period) {
-      lines.push('  Nuvarande år:');
+      lines.push('  Current year:');
       lines.push(`  - ${this.formatInlineCode(this.formatNumber(report.current_period.year ?? new Date().getFullYear(), 0))}`);
-      lines.push(this.formatDetailLine('Timmar', `${this.formatNumber(report.current_period.total_hours ?? 0)} h`));
-      lines.push(this.formatDetailLine('Arbetare', this.formatNumber(report.current_period.active_users ?? 0)));
+      lines.push(this.formatDetailLine('Hours', `${this.formatNumber(report.current_period.total_hours ?? 0)} h`));
+      lines.push(this.formatDetailLine('Contributors', this.formatNumber(report.current_period.active_users ?? 0)));
       lines.push(this.formatDetailLine('Worklogs', this.formatNumber(report.current_period.worklog_count ?? 0)));
       lines.push('');
     }
 
     if (Array.isArray(report.previous_years) && report.previous_years.length > 0) {
-      lines.push('  Tidigare år:');
+      lines.push('  Previous years:');
       for (const yearReport of report.previous_years) {
         lines.push(`    - ${this.formatInlineCode(yearReport.year)}`);
-        lines.push(`      - ${this.formatInlineCode(`Timmar: ${this.formatNumber(yearReport.total_hours ?? 0)} h`)}`);
-        lines.push(`      - ${this.formatInlineCode(`Arbetare: ${this.formatNumber(yearReport.active_users ?? 0)}`)}`);
+        lines.push(`      - ${this.formatInlineCode(`Hours: ${this.formatNumber(yearReport.total_hours ?? 0)} h`)}`);
+        lines.push(`      - ${this.formatInlineCode(`Contributors: ${this.formatNumber(yearReport.active_users ?? 0)}`)}`);
       }
       lines.push('');
     }
 
     if (report.summary) {
-      lines.push('  Sammanfattning:');
+      lines.push('  Summary:');
       if (report.summary.trend) {
         lines.push(`    - ${this.formatInlineCode(`Trend: ${this.escapeMrkdwn(report.summary.trend)}`)}`);
       }
       if (report.summary.average_hours_across_years !== undefined) {
-        lines.push(`    - ${this.formatInlineCode(`Snitt: ${this.formatNumber(report.summary.average_hours_across_years)} h`)}`);
+        lines.push(`    - ${this.formatInlineCode(`Average: ${this.formatNumber(report.summary.average_hours_across_years)} h`)}`);
       }
       if (report.summary.max_hours !== undefined) {
         lines.push(`    - ${this.formatInlineCode(`Max: ${this.formatNumber(report.summary.max_hours)} h`)}`);
@@ -354,7 +354,7 @@ class OutputFormatter {
         lines.push(`    - ${this.formatInlineCode(`Min: ${this.formatNumber(report.summary.min_hours)} h`)}`);
       }
       if (report.summary.years_analyzed !== undefined) {
-        lines.push(`    - ${this.formatInlineCode(`År analyserade: ${this.formatNumber(report.summary.years_analyzed)}`)}`);
+        lines.push(`    - ${this.formatInlineCode(`Years analyzed: ${this.formatNumber(report.summary.years_analyzed)}`)}`);
       }
     }
 

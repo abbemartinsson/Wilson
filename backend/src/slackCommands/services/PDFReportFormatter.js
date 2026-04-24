@@ -48,9 +48,9 @@ class PDFReportFormatter {
     });
 
     // Header section
-    const period = report.period?.label || 'Okänd period';
+    const period = report.period?.label || 'Unknown period';
     const totalHours = this.formatNumber(report.totalHours ?? 0);
-    const projectName = report.projectName || 'Okänt projekt';
+    const projectName = report.projectName || 'Unknown project';
     const projectKey = report.projectKey || 'UNKNOWN';
 
     doc.fontSize(11).font('Helvetica').text(`Period: ${period}`);
@@ -103,7 +103,7 @@ class PDFReportFormatter {
       const hiddenTaskCount = report.tasks.length - visibleTasks.length;
       if (hiddenTaskCount > 0) {
         doc.fontSize(8).font('Helvetica-Oblique');
-        doc.text(`... och ${hiddenTaskCount} fler issues (visas inte för att hålla rapporten till en sida).`, col1X, yPosition, {
+        doc.text(`... and ${hiddenTaskCount} more issues (not shown to keep the report on one page).`, col1X, yPosition, {
           width: col2X - col1X - 10,
         });
       }
@@ -120,9 +120,9 @@ class PDFReportFormatter {
     });
 
     // Header section
-    const period = report.period?.label || 'Okänd period';
+    const period = report.period?.label || 'Unknown period';
     const totalHours = this.formatNumber(report.totalHours ?? 0);
-    const projectName = report.projectName || 'Okänt projekt';
+    const projectName = report.projectName || 'Unknown project';
     const projectKey = report.projectKey || 'UNKNOWN';
 
     doc.fontSize(11).font('Helvetica').text(`Period: ${period}`);
@@ -140,7 +140,7 @@ class PDFReportFormatter {
 
     doc.fontSize(11).font('Helvetica-Bold');
     doc.text('Person', col1X, doc.y, { width: col2X - col1X - 12 });
-    doc.text('Timmar', col2X, doc.y, { width: col2Width, align: 'right' });
+    doc.text('Hours', col2X, doc.y, { width: col2Width, align: 'right' });
     doc.moveDown(0.2);
 
     // Separator line
@@ -167,7 +167,7 @@ class PDFReportFormatter {
       const hiddenParticipantCount = report.participants.length - visibleParticipants.length;
       if (hiddenParticipantCount > 0) {
         doc.fontSize(8).font('Helvetica-Oblique');
-        doc.text(`... och ${hiddenParticipantCount} fler deltagare (visas inte för att hålla rapporten till en sida).`, col1X, yPosition, {
+        doc.text(`... and ${hiddenParticipantCount} more participants (not shown to keep the report on one page).`, col1X, yPosition, {
           width: col2X - col1X - 10,
         });
       }

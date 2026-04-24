@@ -105,7 +105,7 @@ async function main() {
   const slackAccountId = (cli.userId || process.env.SLACK_TEST_USER_ID || '').trim();
   const explicitChannelId = (cli.channelId || '').trim();
   const useManualChannel = Boolean(cli.useManualChannel);
-  const message = cli.message || 'Hej! Detta är ett testmeddelande från boten.';
+  const message = cli.message || 'Hi! This is a test message from the bot.';
 
   if (!slackToken) {
     console.error('Missing SLACK_BOT_TOKEN in src/config/.env');

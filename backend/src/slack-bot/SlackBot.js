@@ -29,18 +29,18 @@ class SlackBot {
 
     process.on('uncaughtException', (error) => {
       if (this.botManager.isSocketEofError(error)) {
-        this.logger.warn('Fångade socket EOF-fel, boten försöker återansluta utan att avsluta processen.');
+        this.logger.warn('Caught socket EOF error, bot will reconnect without exiting the process.');
         this.botManager.scheduleRestart('uncaughtException/EOF');
         return;
       }
 
-      this.logger.error('Okänt okontrollerat fel:', error);
+      this.logger.error('Unknown uncaught error:', error);
       process.exit(1);
     });
 
     process.on('unhandledRejection', (reason) => {
       if (this.botManager.isSocketEofError(reason)) {
-        this.logger.warn('Fångade socket EOF-rejection, boten försöker återansluta.');
+        this.logger.warn('Caught socket EOF rejection, bot will reconnect.');
         this.botManager.scheduleRestart('unhandledRejection/EOF');
         return;
       }

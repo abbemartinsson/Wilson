@@ -168,7 +168,7 @@ class SlackCommandController {
     } catch (error) {
       // If it's a scope error, throw a more helpful message
       if (error.message && error.message.includes('missing_scope')) {
-        throw new Error('Bot saknar files:write scope. Lägg till scope i Slack app settings och reinstallera appen.');
+        throw new Error('Bot is missing files:write scope. Add the scope in Slack app settings and reinstall the app.');
       }
       this.logger.error('Failed to upload PDF file', {
         error: error.message,
@@ -254,7 +254,7 @@ class SlackCommandController {
     if (!monthNumber) {
       return {
         ok: false,
-        message: 'Use a valid month name (for example januari or february) or a number 1-12.',
+        message: 'Use a valid month name (for example january or february) or a number 1-12.',
       };
     }
 
@@ -446,7 +446,7 @@ class SlackCommandController {
       await this.postSlackMessage(
         client,
         channel,
-        this.buildMessagePayload('Tips', 'Skriv !help för att se tillgängliga kommandon.', false),
+        this.buildMessagePayload('Tip', 'Type !help for available commands.', false),
         threadTs
       );
       return true;
@@ -478,7 +478,7 @@ class SlackCommandController {
 
       const messages = this.buildMultiMessagePayload(
         'Access denied',
-        `Du har inte behörighet för ${this.commandPrefix}${parsed.commandName}.\n\n${roleAwareHelpMessage}`,
+        `You do not have permission for ${this.commandPrefix}${parsed.commandName}.\n\n${roleAwareHelpMessage}`,
         true
       );
       for (const message of messages) {
@@ -490,12 +490,7 @@ class SlackCommandController {
     if (parsed.commandName === 'help') {
       logger.info('Showing help for text command', { command: parsed.commandName });
 
-      const helpSections = roleAwareHelpMessage
-        .split('\n\n')
-        .map((section) => section.trim())
-        .filter(Boolean);
-
-      const messages = helpSections.map((section) => this.buildPlainMessagePayload(section));
+      const messages = this.buildSplitPlainMessages(roleAwareHelpMessage, { maxLinesPerMessage: 4 });
 
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
@@ -742,7 +737,7 @@ class SlackCommandController {
           const reportData = this.formatter.extractJsonPayload(result.stdout);
           if (!reportData || typeof reportData !== 'object') {
             const errorMessage = this.buildPlainMessagePayload(
-              '⚠️ Rapporten kunde inte konverteras till PDF. Försök igen senare.'
+              '⚠️ The report could not be converted to PDF. Please try again later.'
             );
             await this.postSlackMessage(client, channel, errorMessage, threadTs);
             return true;
@@ -766,7 +761,7 @@ class SlackCommandController {
           });
 
           const errorMessage = this.buildPlainMessagePayload(
-            `⚠️ PDF-uppladdning misslyckades: ${pdfError.message || 'Okänt fel.'}`
+            `⚠️ PDF upload failed: ${pdfError.message || 'Unknown error.'}`
           );
           await this.postSlackMessage(client, channel, errorMessage, threadTs);
           return true;

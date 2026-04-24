@@ -16,17 +16,17 @@ class WorklogSetupFlow {
   }
 
   formatIssueCandidate(issue, index) {
-    const key = this.formatter.escapeMrkdwn(issue.jira_issue_key || 'okänd nyckel');
-    const title = this.formatter.formatInlineCode(issue.title || 'Okänd issue');
-    const status = this.formatter.escapeMrkdwn(issue.status || 'Okänd status');
+    const key = this.formatter.escapeMrkdwn(issue.jira_issue_key || 'unknown key');
+    const title = this.formatter.formatInlineCode(issue.title || 'Unknown issue');
+    const status = this.formatter.escapeMrkdwn(issue.status || 'Unknown status');
 
     return `${index}. ${key} - ${title} (${status})`;
   }
 
   buildSelectionMessage(issues) {
     const lines = [
-      'Jag hittade dessa issues som är assignade till dig.',
-      'Svara med numret för den issue du vill logga tid på, eller skriv `!cancel` för att avbryta.',
+      'I found these issues assigned to you.',
+      'Reply with the number for the issue you want to log time on, or type `!cancel` to abort.',
       '',
     ];
 
@@ -38,21 +38,21 @@ class WorklogSetupFlow {
   }
 
   buildHoursMessage(issue) {
-    const key = this.formatter.escapeMrkdwn(issue.jira_issue_key || 'okänd issue');
-    const title = this.formatter.escapeMrkdwn(issue.title || 'Okänd issue');
+    const key = this.formatter.escapeMrkdwn(issue.jira_issue_key || 'unknown issue');
+    const title = this.formatter.escapeMrkdwn(issue.title || 'Unknown issue');
 
     return [
-      `Hur många timmar vill du logga på *${key}*?`,
+      `How many hours do you want to log on *${key}*?`,
       `• ${title}`,
-      'Svara med ett tal, till exempel `1,5` eller `2`.',
-      'Skriv `!cancel` om du vill avbryta.',
+      'Reply with a number, for example `1.5` or `2`.',
+      'Type `!cancel` if you want to abort.',
     ].join('\n');
   }
 
   buildConfirmationMessage(issue, hours) {
-    const key = this.formatter.escapeMrkdwn(issue.jira_issue_key || 'okänd issue');
-    const title = this.formatter.escapeMrkdwn(issue.title || 'Okänd issue');
-    return `Sparat: ${this.formatter.formatNumber(hours)} h på *${key}* - ${title}.`;
+    const key = this.formatter.escapeMrkdwn(issue.jira_issue_key || 'unknown issue');
+    const title = this.formatter.escapeMrkdwn(issue.title || 'Unknown issue');
+    return `Saved: ${this.formatter.formatNumber(hours)} h on *${key}* - ${title}.`;
   }
 
   isDoneLikeIssueStatus(status) {
@@ -73,24 +73,24 @@ class WorklogSetupFlow {
       .trim()
       .toLowerCase()
       .replace(/\s+/g, '')
-      .replace(/(?:tim|timmar|h|hours?)$/g, '')
+      .replace(/(?:h|hours?)$/g, '')
       .replace(',', '.');
 
     if (!normalized) {
-      return { ok: false, message: 'Skriv ett antal timmar, till exempel 1,5 eller 2.' };
+      return { ok: false, message: 'Enter a number of hours, for example 1.5 or 2.' };
     }
 
     if (!/^-?\d+(?:\.\d+)?$/.test(normalized)) {
-      return { ok: false, message: 'Jag kunde inte läsa tiden. Skriv ett tal, till exempel 1,5 eller 2.' };
+      return { ok: false, message: 'I could not parse the time. Enter a number, for example 1.5 or 2.' };
     }
 
     const hours = Number.parseFloat(normalized);
     if (!Number.isFinite(hours) || hours <= 0) {
-      return { ok: false, message: 'Tiden måste vara större än 0.' };
+      return { ok: false, message: 'The time must be greater than 0.' };
     }
 
     if (hours > 24) {
-      return { ok: false, message: 'Tiden verkar för hög för en worklogg. Skriv ett värde på 24 timmar eller mindre.' };
+      return { ok: false, message: 'The time seems too high for a worklog. Enter a value of 24 hours or less.' };
     }
 
     return { ok: true, value: hours };
@@ -98,7 +98,7 @@ class WorklogSetupFlow {
 
   async start({ channel, client, threadTs, slackUserId }) {
     if (!slackUserId) {
-      await this.sendMessage(client, channel, 'Jag kunde inte identifiera ditt Slack-konto.', threadTs);
+      await this.sendMessage(client, channel, 'I could not identify your Slack account.', threadTs);
       return true;
     }
 
@@ -107,7 +107,7 @@ class WorklogSetupFlow {
       await this.sendMessage(
         client,
         channel,
-        'Jag hittade ingen användare kopplad till ditt Slack-konto. Skriv gärna ett DM först så jag kan länka dig.',
+        'I found no user linked to your Slack account. Send me a DM first so I can link it.',
         threadTs
       );
       return true;
@@ -117,7 +117,7 @@ class WorklogSetupFlow {
     const issues = allAssignedIssues.filter((issue) => !this.isDoneLikeIssueStatus(issue.status));
 
     if (issues.length === 0) {
-      await this.sendMessage(client, channel, 'Jag hittade inga aktiva (ej done) issues som är assignade till dig.', threadTs);
+      await this.sendMessage(client, channel, 'I found no active (not done) issues assigned to you.', threadTs);
       return true;
     }
 
@@ -153,7 +153,7 @@ class WorklogSetupFlow {
 
     if (normalizedText === '!cancel' || normalizedText === 'cancel' || normalizedText === 'stop') {
       this.store.delete(key);
-      await this.sendMessage(client, replyChannel, 'Worklog-flödet avbröts.', threadTs);
+      await this.sendMessage(client, replyChannel, 'Worklog flow was cancelled.', threadTs);
       return true;
     }
 
@@ -164,7 +164,7 @@ class WorklogSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          `Svara med ett nummer mellan 1 och ${state.issues.length}, eller skriv !cancel för att avbryta.`,
+          `Reply with a number between 1 and ${state.issues.length}, or type !cancel to abort.`,
           threadTs
         );
         return true;
@@ -195,7 +195,7 @@ class WorklogSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          'Kunde inte hitta internt issue-id för vald issue. Kör !worklog igen efter nästa sync.',
+          'Could not find an internal issue id for the selected issue. Run !worklog again after the next sync.',
           threadTs
         );
         return true;
@@ -206,7 +206,7 @@ class WorklogSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          'Kunde inte hitta Jira issue-id för vald issue. Kör !worklog igen efter nästa sync.',
+          'Could not find a Jira issue id for the selected issue. Run !worklog again after the next sync.',
           threadTs
         );
         return true;
@@ -217,7 +217,7 @@ class WorklogSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          'Din användare saknar jira_account_id i databasen. Kör sync:users och testa igen.',
+          'Your user is missing jira_account_id in the database. Run sync:users and try again.',
           threadTs
         );
         return true;
@@ -236,11 +236,11 @@ class WorklogSetupFlow {
           description: 'Logged via Slack worklog command',
         });
       } catch (error) {
-        const apiMessage = error?.response?.data?.message || error?.message || 'Okänt fel från Tempo API';
+        const apiMessage = error?.response?.data?.message || error?.message || 'Unknown error from Tempo API';
         await this.sendMessage(
           client,
           replyChannel,
-          `Kunde inte logga i Tempo/Jira: ${this.formatter.escapeMrkdwn(String(apiMessage))}`,
+          `Could not log time in Tempo/Jira: ${this.formatter.escapeMrkdwn(String(apiMessage))}`,
           threadTs
         );
         return true;
@@ -257,11 +257,11 @@ class WorklogSetupFlow {
       try {
         await this.worklogRepository.upsertWorklogs([tempoShapeWorklog]);
       } catch (error) {
-        const localMessage = error?.message || 'Okänt fel vid lokal sync';
+        const localMessage = error?.message || 'Unknown error during local sync';
         await this.sendMessage(
           client,
           replyChannel,
-          `Loggning i Tempo/Jira lyckades men lokal sync misslyckades: ${this.formatter.escapeMrkdwn(String(localMessage))}`,
+          `Logging in Tempo/Jira succeeded, but local sync failed: ${this.formatter.escapeMrkdwn(String(localMessage))}`,
           threadTs
         );
         this.store.delete(key);
@@ -273,7 +273,7 @@ class WorklogSetupFlow {
       await this.sendMessage(
         client,
         replyChannel,
-        `${this.buildConfirmationMessage(state.issue, parsedHours.value)}\nSynkat till Tempo/Jira.`,
+        `${this.buildConfirmationMessage(state.issue, parsedHours.value)}\nSynced to Tempo/Jira.`,
         threadTs
       );
       return true;

@@ -113,13 +113,13 @@ async function getProjectLastWeekHours(input) {
 			timeZone: 'Europe/Stockholm',
 			startDate: weekRange.startDate,
 			endDate: weekRange.endDate,
-			label: `${weekRange.startDate} till ${weekRange.endDate}`,
+			label: `${weekRange.startDate} to ${weekRange.endDate}`,
 		},
 		totalSeconds,
 		totalHours: roundToTwoDecimals(totalSeconds / 3600),
 		hours: duration.hours,
 		minutes: duration.minutes,
-		formattedDuration: `${duration.hours} timmar ${duration.minutes} minuter`,
+		formattedDuration: `${duration.hours} hours ${duration.minutes} minutes`,
 	};
 }
 

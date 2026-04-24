@@ -782,7 +782,7 @@ async function getProjectTaskWorklogReport(input, options = {}) {
 			tasksMap.set(issueId, {
 				issueId,
 				issueKey: issue?.jira_issue_key || `ISSUE-${issueId}`,
-				title: issue?.title || 'Okänd task',
+				title: issue?.title || 'Unknown task',
 				totalSeconds: 0,
 				worklogCount: 0,
 			});
@@ -848,7 +848,7 @@ async function getProjectUserWorklogReport(input, options = {}) {
 		return {
 			issueId: worklog.issue_id,
 			issueKey: issue?.jira_issue_key || `ISSUE-${worklog.issue_id || ''}`,
-			title: issue?.title || 'Okänd task',
+			title: issue?.title || 'Unknown task',
 			userId: worklog.user_id,
 			userName: user?.name || `User ${worklog.user_id}`,
 			userEmail: user?.email || '',

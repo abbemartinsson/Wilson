@@ -11,7 +11,7 @@ class SlackBotConfig {
 
   validateSocketMode() {
     if (this.useSocketMode && !process.env.SLACK_APP_TOKEN) {
-      throw new Error('SLACK_APP_TOKEN saknas. Aktivera Socket Mode i Slack och lägg till token i .env');
+      throw new Error('SLACK_APP_TOKEN is missing. Enable Socket Mode in Slack and add the token to .env');
     }
   }
 }

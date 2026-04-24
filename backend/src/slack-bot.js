@@ -1,7 +1,7 @@
 const path = require('path');
 const dotenv = require('dotenv');
 
-// Ladda .env från projektets config-mapp för att göra bot-start robust.
+// Load .env from the project's config folder for robust bot startup.
 dotenv.config({ path: path.join(__dirname, 'config', '.env') });
 dotenv.config();
 

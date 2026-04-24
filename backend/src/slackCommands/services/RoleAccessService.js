@@ -81,7 +81,7 @@ class RoleAccessService {
     const allowedCommands = this.getAllowedCommandsForRole(normalizedRole);
     const allowedSet = new Set(allowedCommands);
     const usedCommandNames = new Set();
-    const helpLines = [`📚 Tillgängliga kommandon för roll: *${roleLabel}*`, ''];
+    const helpLines = [`📚 Available commands for role: *${roleLabel}*`, ''];
 
     for (const group of this.helpCommandGroups) {
       const visibleCommands = group.commands.filter((commandName) => allowedSet.has(commandName));
@@ -94,7 +94,7 @@ class RoleAccessService {
       helpLines.push(`• ${group.emoji} *${group.title}:*`);
       for (const commandName of visibleCommands) {
         const usage = this.commandUsageText[commandName] || this.commandMap[commandName]?.usage || commandName;
-        const shortDescription = this.commandShortDescriptions[commandName] || 'Ingen beskrivning.';
+        const shortDescription = this.commandShortDescriptions[commandName] || 'No description available.';
         helpLines.push(`   - \`${usage}\` - ${shortDescription}`);
       }
 
@@ -106,10 +106,10 @@ class RoleAccessService {
     );
 
     if (ungroupedCommands.length > 0) {
-      helpLines.push('• 🧩 *Övrigt:*');
+      helpLines.push('• 🧩 *Other:*');
       for (const commandName of ungroupedCommands) {
         const usage = this.commandUsageText[commandName] || this.commandMap[commandName]?.usage || commandName;
-        const shortDescription = this.commandShortDescriptions[commandName] || 'Ingen beskrivning.';
+        const shortDescription = this.commandShortDescriptions[commandName] || 'No description available.';
         helpLines.push(`   - \`${usage}\` - ${shortDescription}`);
       }
 

@@ -44,7 +44,7 @@ class MessageEventHandler {
         name: profile?.realName || null,
       });
     } catch (error) {
-      this.logger.warn('Kunde inte spara slack_dm_channel_id:', error.message || error);
+      this.logger.warn('Could not save slack_dm_channel_id:', error.message || error);
     }
   }
 
@@ -62,7 +62,7 @@ class MessageEventHandler {
         realName: resp?.user?.real_name || profile.real_name || profile.display_name || null,
       };
     } catch (error) {
-      this.logger.warn('Kunde inte hämta Slack-användarprofil:', error.message || error);
+      this.logger.warn('Could not fetch Slack user profile:', error.message || error);
       return null;
     }
   }
@@ -117,7 +117,7 @@ class MessageEventHandler {
         is_dm_channel: isDmChannel,
       });
 
-      // Bara DM, endast användarmeddelanden, ingen system/subtype-trafik.
+      // Only DMs, only user messages, no system/subtype traffic.
       if (!isDmChannel) return;
       if (event.bot_id || event.subtype) return;
       if (!event.text) return;
@@ -138,7 +138,7 @@ class MessageEventHandler {
 
       const targetChannel = event.channel;
 
-      // Standard: svara i huvud-DM (inte i thread) om inte uttryckligen aktiverat.
+      // Default: reply in main DM (not thread) unless explicitly enabled.
       const messagePayload = {
         channel: targetChannel,
         text: aiReply,
@@ -160,14 +160,14 @@ class MessageEventHandler {
         mode: isThreadMessage ? 'mirrored-thread' : (this.config.replyInThread ? 'forced-thread' : 'main-dm'),
       });
     } catch (error) {
-      this.logger.error('Fel:', error);
+      this.logger.error('Error:', error);
       try {
         await client.chat.postMessage({
           channel: event.channel,
-          text: 'Något gick fel när jag försökte svara. Försök igen senare.',
+          text: 'Something went wrong while I tried to reply. Please try again later.',
         });
       } catch (postError) {
-        this.logger.error('Kunde inte posta felmeddelande i Slack:', postError.message);
+        this.logger.error('Could not post error message to Slack:', postError.message);
       }
     }
   }
