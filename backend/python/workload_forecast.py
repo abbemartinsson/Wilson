@@ -14,6 +14,8 @@ from workload_model import (
     load_model_artifact,
     prepare_weekly_data,
     resolve_model_path,
+    save_model_artifact,
+    train_best_model,
 )
 
 warnings.filterwarnings("ignore")
@@ -26,7 +28,17 @@ def forecast_from_exported_model(weekly_df, periods_months=3):
         raise ValueError(f"Insufficient monthly data for forecasting. Need at least 4 months, got {len(monthly_df)}")
 
     model_path = resolve_model_path()
-    artifact = load_model_artifact(model_path)
+    try:
+        artifact = load_model_artifact(model_path)
+    except FileNotFoundError:
+        # Fall back to runtime training when a notebook-exported artifact is unavailable.
+        artifact = train_best_model(monthly_df)
+        try:
+            save_model_artifact(artifact, model_path)
+        except Exception:
+            # Forecast should still work even if persisting the artifact fails.
+            pass
+
     monthly_forecast = forecast_with_artifact(monthly_df, artifact, periods_months=periods_months)
 
     return {

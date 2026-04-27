@@ -37,18 +37,18 @@ async function generateWorkloadForecast(options = {}) {
 	try {
 		const forecastMonths = options.forecastMonths || 3;
 		const includeHistorical = options.includeHistorical !== false;
-		
+
 		// Get historical worklogs
 		const worklogs = await analyticsService.getHistoricalWorklogs({
 			startDate: options.startDate,
 			endDate: options.endDate,
 			projectKey: options.projectKey
 		});
-		
+
 		if (worklogs.length === 0) {
 			throw new Error('No worklog data available for forecasting');
 		}
-		
+
 		// Prepare data for Python script
 		const inputData = {
 			worklogs: worklogs.map(w => ({
@@ -59,10 +59,10 @@ async function generateWorkloadForecast(options = {}) {
 			forecast_months: forecastMonths,
 			include_historical: includeHistorical
 		};
-		
+
 		// Run Python forecast script
 		const forecastResult = await runPythonForecast(inputData);
-		
+
 		return forecastResult;
 	} catch (error) {
 		console.error('Error generating workload forecast:', error);
@@ -80,47 +80,62 @@ function runPythonForecast(inputData) {
 	return new Promise((resolve, reject) => {
 		const pythonScriptPath = path.join(__dirname, '../../python/workload_forecast.py');
 		const pythonExecutable = resolvePythonExecutable();
-		
+
 		// Spawn Python process
 		const pythonProcess = spawn(pythonExecutable, [pythonScriptPath]);
-		
+
 		let outputData = '';
 		let errorData = '';
-		
+
 		// Send input data to Python via stdin
 		pythonProcess.stdin.write(JSON.stringify(inputData));
 		pythonProcess.stdin.end();
-		
+
 		// Collect output
 		pythonProcess.stdout.on('data', (data) => {
 			outputData += data.toString();
 		});
-		
+
 		pythonProcess.stderr.on('data', (data) => {
 			errorData += data.toString();
 		});
-		
+
 		// Handle process completion
 		pythonProcess.on('close', (code) => {
 			if (code !== 0) {
-				reject(new Error(`Python forecast failed with code ${code}: ${errorData}`));
+				const stderrText = (errorData || '').trim();
+				const stdoutText = (outputData || '').trim();
+
+				if (stdoutText) {
+					try {
+						const parsedError = JSON.parse(stdoutText);
+						const parsedMessage = parsedError.error || stdoutText;
+						reject(new Error(`Python forecast failed with code ${code}: ${parsedMessage}`));
+						return;
+					} catch (parseError) {
+						// Fall through to the raw text fallback below.
+					}
+				}
+
+				const failureMessage = stderrText || stdoutText || 'No error output from Python process';
+				reject(new Error(`Python forecast failed with code ${code}: ${failureMessage}`));
 				return;
 			}
-			
+
 			try {
 				const result = JSON.parse(outputData);
-				
+
 				if (!result.success) {
 					reject(new Error(`Forecast error: ${result.error}`));
 					return;
 				}
-				
+
 				resolve(result);
 			} catch (parseError) {
 				reject(new Error(`Failed to parse Python output: ${parseError.message}`));
 			}
 		});
-		
+
 		pythonProcess.on('error', (error) => {
 			reject(new Error(`Failed to spawn Python process: ${error.message}`));
 		});
@@ -138,31 +153,31 @@ function runPythonForecast(inputData) {
 async function getComprehensiveWorkloadForecast(options = {}) {
 	try {
 		const forecastMonths = options.forecastMonths || 3;
-		
+
 		// Get ML forecast
 		const mlForecast = await generateWorkloadForecast({
 			forecastMonths,
 			includeHistorical: true
 		});
-		
+
 		// Get current period analytics
 		const now = new Date();
 		const currentMonth = now.getMonth() + 1;
 		const currentYear = now.getFullYear();
-		
+
 		const historicalComparison = await analyticsService.getHistoricalComparison({
 			month: currentMonth,
 			year: currentYear,
 			yearsBack: 3
 		});
-		
+
 		// Get recent trends (last 6 months)
 		const sixMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 6, 1);
 		const recentAnalytics = await analyticsService.getWorkloadAnalytics({
 			startDate: sixMonthsAgo,
 			endDate: now
 		});
-		
+
 		return {
 			forecast: mlForecast.forecast,
 			historical: {
