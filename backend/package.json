@@ -8,6 +8,7 @@
     "api": "node src/index.js",
     "dev": "nodemon src/index.js",
     "bot": "node src/slack-bot.js",
+    "all": "concurrently \"npm run bot\" \"npm run api\"",
     "sync:daily": "node src/scripts/sync.js daily",
     "sync:all": "node src/scripts/sync.js all",
     "sync:tables": "node src/scripts/sync.js tables",
