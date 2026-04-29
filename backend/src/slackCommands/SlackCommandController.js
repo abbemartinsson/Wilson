@@ -645,6 +645,16 @@ class SlackCommandController {
       return true;
     }
 
+    if (config.customHandler === 'lo-siento') {
+      await this.sendPlainTextMessage(
+        client,
+        channel,
+        'https://www.youtube.com/watch?v=YpKzQeusvkA',
+        threadTs
+      );
+      return true;
+    }
+
     const inputText = this.sanitizeInput(parsed.commandText);
     let scriptArgument = inputText || undefined;
     let projectInputForResolution = inputText;

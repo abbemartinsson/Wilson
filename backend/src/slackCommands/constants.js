@@ -86,6 +86,10 @@ const commandMap = {
     customHandler: 'timesheet-hours',
     usage: 'reminder hours',
   },
+  'lo siento': {
+    customHandler: 'lo-siento',
+    usage: 'lo siento',
+  },
 };
 
 const ROLE_PERMISSION_CONFIG = {
@@ -104,6 +108,7 @@ const ROLE_PERMISSION_CONFIG = {
       'reminder update',
       'reminder status',
       'reminder hours',
+      'lo siento',
     ],
   },
   'project manager': {
@@ -124,6 +129,7 @@ const ROLE_PERMISSION_CONFIG = {
       'reminder update',
       'reminder status',
       'reminder hours',
+      'lo siento',
     ],
   },
 };
