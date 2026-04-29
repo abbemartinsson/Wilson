@@ -89,6 +89,7 @@ const commandMap = {
   'lo siento': {
     customHandler: 'lo-siento',
     usage: 'lo siento',
+    hidden: true,
   },
 };
 
@@ -108,7 +109,6 @@ const ROLE_PERMISSION_CONFIG = {
       'reminder update',
       'reminder status',
       'reminder hours',
-      'lo siento',
     ],
   },
   'project manager': {
@@ -129,7 +129,6 @@ const ROLE_PERMISSION_CONFIG = {
       'reminder update',
       'reminder status',
       'reminder hours',
-      'lo siento',
     ],
   },
 };

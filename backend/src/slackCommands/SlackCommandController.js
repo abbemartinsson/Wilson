@@ -552,7 +552,8 @@ class SlackCommandController {
       return true;
     }
 
-    if (!this.roleAccessService.canUseCommand(userRole, parsed.commandName)) {
+    // Skip permission check for hidden commands
+    if (!config.hidden && !this.roleAccessService.canUseCommand(userRole, parsed.commandName)) {
       logger.warn('User attempted command without permission', {
         commandName: parsed.commandName,
         slackUserId,
