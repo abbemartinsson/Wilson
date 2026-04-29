@@ -70,6 +70,68 @@ class SlackCommandController {
     });
   }
 
+  async sendAccessDeniedMessage(client, channel, threadTs) {
+    await this.postSlackMessage(
+      client,
+      channel,
+      this.buildPlainMessagePayload('You do not have access to this bot.'),
+      threadTs
+    );
+  }
+
+  async ensureBotAccess({ slackUserId, client, channel, threadTs, logger = this.logger }) {
+    if (!slackUserId) {
+      await this.sendAccessDeniedMessage(client, channel, threadTs);
+      return null;
+    }
+
+    try {
+      const existingUser = await userRepository.findUserBySlackAccountId(slackUserId);
+      if (existingUser) {
+        if (!existingUser.email) {
+          await this.sendAccessDeniedMessage(client, channel, threadTs);
+          return null;
+        }
+
+        return existingUser;
+      }
+
+      if (!client?.users?.info) {
+        await this.sendAccessDeniedMessage(client, channel, threadTs);
+        return null;
+      }
+
+      const profileResponse = await client.users.info({ user: slackUserId });
+      const profile = profileResponse?.user?.profile || {};
+      const email = profile.email || null;
+
+      if (!email) {
+        await this.sendAccessDeniedMessage(client, channel, threadTs);
+        return null;
+      }
+
+      const linkedUser = await userRepository.linkSlackIdentityByEmail({
+        slackAccountId: slackUserId,
+        slackDmChannelId: null,
+        email,
+      });
+
+      if (!linkedUser) {
+        await this.sendAccessDeniedMessage(client, channel, threadTs);
+        return null;
+      }
+
+      return linkedUser;
+    } catch (error) {
+      logger.warn('Could not verify bot access', {
+        slackUserId,
+        message: error.message || error,
+      });
+      await this.sendAccessDeniedMessage(client, channel, threadTs);
+      return null;
+    }
+  }
+
   sanitizeInput(text = '') {
     return String(text)
       .replace(/[\r\n\t]+/g, ' ')
@@ -263,12 +325,17 @@ class SlackCommandController {
 
   parseCommandText(text) {
     const sanitizedText = this.sanitizeInput(text);
-    if (!sanitizedText.startsWith(this.commandPrefix)) {
+    if (!sanitizedText) {
+      return null;
+    }
+
+    const prefix = String(this.commandPrefix || '');
+    if (prefix && !sanitizedText.startsWith(prefix)) {
       return null;
     }
 
     const withoutPrefix = sanitizedText
-      .slice(this.commandPrefix.length)
+      .slice(prefix.length)
       .trim()
       .replace(/-/g, ' ')
       .toLowerCase();
@@ -293,6 +360,10 @@ class SlackCommandController {
           commandText: aliasedCommandText.slice(commandName.length).trim(),
         };
       }
+    }
+
+    if (!prefix) {
+      return null;
     }
 
     const [commandNameRaw, ...rest] = aliasedCommandText.split(' ');
@@ -437,6 +508,18 @@ class SlackCommandController {
     slackUserId,
     onTimesheetReminderSetup,
   }) {
+    const authorizedUser = await this.ensureBotAccess({
+      slackUserId,
+      client,
+      channel,
+      threadTs,
+      logger,
+    });
+
+    if (!authorizedUser) {
+      return true;
+    }
+
     const parsed = this.parseCommandText(text);
     if (!parsed) {
       logger.info('Non-command text received, suggesting help command', {
@@ -446,7 +529,7 @@ class SlackCommandController {
       await this.postSlackMessage(
         client,
         channel,
-        this.buildMessagePayload('Tip', 'Type !help for available commands.', false),
+        this.buildMessagePayload('Tip', 'Type help for available commands.', false),
         threadTs
       );
       return true;
@@ -655,8 +738,8 @@ class SlackCommandController {
       if (parsed.commandName === 'report m') {
         const monthNumber =
           isMonthlyReportCommand &&
-          parsedMonthlyInput &&
-          parsedMonthlyInput.projectInput === resolvedFromInput
+            parsedMonthlyInput &&
+            parsedMonthlyInput.projectInput === resolvedFromInput
             ? parsedMonthlyInput.monthNumber
             : null;
 
@@ -672,8 +755,8 @@ class SlackCommandController {
       if (parsed.commandName === 'report mt') {
         const monthNumber =
           isMonthlyReportCommand &&
-          parsedMonthlyInput &&
-          parsedMonthlyInput.projectInput === resolvedFromInput
+            parsedMonthlyInput &&
+            parsedMonthlyInput.projectInput === resolvedFromInput
             ? parsedMonthlyInput.monthNumber
             : null;
 
@@ -819,14 +902,50 @@ class SlackCommandController {
   }
 
   async handlePendingUserCostSetup(event, client) {
+    const authorizedUser = await this.ensureBotAccess({
+      slackUserId: event?.user,
+      client,
+      channel: event?.channel,
+      threadTs: event?.thread_ts,
+      logger: this.logger,
+    });
+
+    if (!authorizedUser) {
+      return true;
+    }
+
     return this.userCostFlow.handlePending(event, client);
   }
 
   async handlePendingWorklogSetup(event, client) {
+    const authorizedUser = await this.ensureBotAccess({
+      slackUserId: event?.user,
+      client,
+      channel: event?.channel,
+      threadTs: event?.thread_ts,
+      logger: this.logger,
+    });
+
+    if (!authorizedUser) {
+      return true;
+    }
+
     return this.worklogFlow.handlePending(event, client);
   }
 
   async handlePendingReminderSetup(event, client) {
+    const authorizedUser = await this.ensureBotAccess({
+      slackUserId: event?.user,
+      client,
+      channel: event?.channel,
+      threadTs: event?.thread_ts,
+      logger: this.logger,
+    });
+
+    if (!authorizedUser) {
+      return true;
+    }
+
     return this.reminderSetupFlow.handlePending(event, client);
   }
 }

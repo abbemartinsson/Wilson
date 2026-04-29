@@ -48,7 +48,7 @@ class UserCostSetupFlow {
   buildSelectionMessage(firstName, candidates) {
     const lines = [
       `I found multiple users with the first name *${this.formatter.escapeMrkdwn(firstName)}*.`,
-      'Reply with the number for the correct person, or type `!cancel` to abort.',
+      'Reply with the number for the correct person, or type `cancel` to abort.',
       '',
     ];
 
@@ -64,14 +64,14 @@ class UserCostSetupFlow {
     return [
       `What is the hourly cost for *${name}*?`,
       'Reply with an amount in SEK/hour, for example `350` or `350.50`.',
-      'Type `!cancel` if you want to abort.',
+      'Type `cancel` if you want to abort.',
     ].join('\n');
   }
 
   async start({ text, channel, client, threadTs, slackUserId, sanitizeInput }) {
     const firstName = sanitizeInput(text).split(' ')[0];
     if (!firstName) {
-      await this.sendMessage(client, channel, 'Usage: !user cost <first_name>', threadTs, true);
+      await this.sendMessage(client, channel, 'Usage: user cost <first_name>', threadTs, true);
       return true;
     }
 
@@ -138,7 +138,7 @@ class UserCostSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          `Reply with a number between 1 and ${state.candidates.length}, or type !cancel to abort.`,
+          `Reply with a number between 1 and ${state.candidates.length}, or type cancel to abort.`,
           threadTs,
           true
         );

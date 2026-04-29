@@ -35,11 +35,11 @@ Boten tar emot DM i Slack, skickar meddelandet till Python chatbot-router, som a
 ### Rollstyrning av Slack-kommandon
 
 Slack-kommandon kan nu styras per användare via kolumnen `slack_role` i tabellen `USERS`.
-Användare kopplas till rätt rad via `slack_account_id`.
+Botten är endast tillgänglig för användare som finns i `USERS` och har en e-postadress. Slack-kontot kopplas till rätt rad via `slack_account_id`.
 
 Standardroller i koden:
 - `admin` - alla kommandon
-- `member` - nästan alla kommandon `!help`
+- `member` - nästan alla kommandon `help`
 
 Om ingen roll finns, eller om rollen är okänd, används `member`.
 
@@ -49,7 +49,7 @@ kolumn heter slack_role med enum value role: admin eller member
 Admin kan också sätta en users kostnad per timme med ett interaktivt kommando:
 
 ```text
-!user cost <förnamn>
+user cost <förnamn>
 ```
 
 Om flera users har samma förnamn listar boten alla träffar och du får välja rätt person innan du anger beloppet i kr/timme.
@@ -57,7 +57,7 @@ Om flera users har samma förnamn listar boten alla träffar och du får välja 
 Du kan också logga tid på ett av dina assignade issues med:
 
 ```text
-!worklog
+worklog
 ```
 
 Boten listar dina assignade issues som en numrerad lista. Svara med till exempel `1` eller `5`, ange sedan antal timmar och workloggen sparas i databasen.
@@ -70,7 +70,7 @@ set slack_role = 'admin'
 where slack_account_id = 'U0123456789';
 ```
 
-`!help` visar bara de kommandon som den aktuella användaren har tillgång till.
+`help` visar bara de kommandon som den aktuella användaren har tillgång till.
 
 ---
 

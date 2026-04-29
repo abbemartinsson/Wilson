@@ -26,7 +26,7 @@ class WorklogSetupFlow {
   buildSelectionMessage(issues) {
     const lines = [
       'I found these issues assigned to you.',
-      'Reply with the number for the issue you want to log time on, or type `!cancel` to abort.',
+      'Reply with the number for the issue you want to log time on, or type `cancel` to abort.',
       '',
     ];
 
@@ -45,7 +45,7 @@ class WorklogSetupFlow {
       `How many hours do you want to log on *${key}*?`,
       `• ${title}`,
       'Reply with a number, for example `1.5` or `2`.',
-      'Type `!cancel` if you want to abort.',
+      'Type `cancel` if you want to abort.',
     ].join('\n');
   }
 
@@ -164,7 +164,7 @@ class WorklogSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          `Reply with a number between 1 and ${state.issues.length}, or type !cancel to abort.`,
+          `Reply with a number between 1 and ${state.issues.length}, or type cancel to abort.`,
           threadTs
         );
         return true;
@@ -195,7 +195,7 @@ class WorklogSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          'Could not find an internal issue id for the selected issue. Run !worklog again after the next sync.',
+          'Could not find an internal issue id for the selected issue. Run worklog again after the next sync.',
           threadTs
         );
         return true;
@@ -206,7 +206,7 @@ class WorklogSetupFlow {
         await this.sendMessage(
           client,
           replyChannel,
-          'Could not find a Jira issue id for the selected issue. Run !worklog again after the next sync.',
+          'Could not find a Jira issue id for the selected issue. Run worklog again after the next sync.',
           threadTs
         );
         return true;

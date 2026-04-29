@@ -177,7 +177,7 @@ async function linkSlackIdentityByEmail({ slackAccountId, slackDmChannelId, emai
     .from(TABLE)
     .update({
       slack_account_id: slackAccountId,
-      slack_dm_channel_id: slackDmChannelId,
+      ...(slackDmChannelId ? { slack_dm_channel_id: slackDmChannelId } : {}),
       updated_at: new Date().toISOString(),
     })
     .eq('id', existingUser.id)

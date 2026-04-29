@@ -9,9 +9,21 @@ class MessageEventHandler {
     this.conversationStore = new Map();
   }
 
-  async persistSlackDmChannel(event, client) {
-    if (!event?.user || !event?.channel) {
+  async sendAccessDenied(client, channel, threadTs) {
+    if (!client?.chat?.postMessage || !channel) {
       return;
+    }
+
+    await client.chat.postMessage({
+      channel,
+      thread_ts: threadTs || undefined,
+      text: 'You do not have access to this bot.',
+    });
+  }
+
+  async ensureSlackAccess(event, client, threadTs) {
+    if (!event?.user || !event?.channel) {
+      return false;
     }
 
     const slackAccountId = String(event.user);
@@ -21,13 +33,23 @@ class MessageEventHandler {
       const existingUser = await userRepository.findUserBySlackAccountId(slackAccountId);
 
       if (existingUser) {
+        if (!existingUser.email) {
+          await this.sendAccessDenied(client, slackDmChannelId, threadTs);
+          return false;
+        }
+
         if (existingUser.slack_dm_channel_id !== slackDmChannelId) {
           await userRepository.setSlackDmChannelIdBySlackAccountId(slackAccountId, slackDmChannelId);
         }
-        return;
+        return true;
       }
 
       const profile = await this.getSlackUserProfile(client, slackAccountId);
+      if (!profile?.email) {
+        await this.sendAccessDenied(client, slackDmChannelId, threadTs);
+        return false;
+      }
+
       const linkedUser = await userRepository.linkSlackIdentityByEmail({
         slackAccountId,
         slackDmChannelId,
@@ -35,16 +57,15 @@ class MessageEventHandler {
       });
 
       if (linkedUser) {
-        return;
+        return true;
       }
 
-      await userRepository.upsertSlackUser({
-        slackAccountId,
-        slackDmChannelId,
-        name: profile?.realName || null,
-      });
+      await this.sendAccessDenied(client, slackDmChannelId, threadTs);
+      return false;
     } catch (error) {
-      this.logger.warn('Could not save slack_dm_channel_id:', error.message || error);
+      this.logger.warn('Could not verify Slack access:', error.message || error);
+      await this.sendAccessDenied(client, slackDmChannelId, threadTs);
+      return false;
     }
   }
 
@@ -75,9 +96,11 @@ class MessageEventHandler {
       const isDmChannel =
         event.channel_type === 'im' ||
         (typeof event.channel === 'string' && event.channel.startsWith('D'));
+      const replyThreadTs = event.thread_ts || event.ts || null;
 
       if (isDmChannel) {
-        await this.persistSlackDmChannel(event, client);
+        const hasAccess = await this.ensureSlackAccess(event, client, replyThreadTs);
+        if (!hasAccess) return;
       }
 
       if (isDmChannel) {
@@ -96,7 +119,7 @@ class MessageEventHandler {
         channel: event.channel,
         client,
         logger: this.logger,
-        threadTs: event.thread_ts,
+        threadTs: replyThreadTs,
         slackUserId: event.user,
         onTimesheetReminderSetup,
       });

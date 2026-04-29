@@ -1,6 +1,6 @@
 # Python Machine Learning för Arbetsbelastningsprognoser
 
-Detta system använder en notebook-baserad träningspipeline (scikit-learn) för att exportera en modell som sedan används av Slack-kommandot `!forecast`.
+Detta system använder en notebook-baserad träningspipeline (scikit-learn) för att exportera en modell som sedan används av Slack-kommandot `forecast`.
 
 ## Installation
 

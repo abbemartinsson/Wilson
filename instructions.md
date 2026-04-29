@@ -309,9 +309,9 @@ I nuvarande implementation används textkommandon med `!`-prefix.
 Exempel:
 
 ```
-!project info HULTP
+project info HULTP
 !project search hulta
-!forecast 3
+forecast 3
 !history 3
 ```
 

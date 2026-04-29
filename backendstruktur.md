@@ -56,7 +56,7 @@ Det här är den viktigaste koden i projektet.
 
 - `index.js` - Express-server för reporting API
 - `slack-bot.js` - Slack-bot som svarar på meddelanden och DMer
-- `slackCommands.js` - textkommandon som `!help` och projektkommandon
+- `slackCommands.js` - textkommandon som `help` och projektkommandon
 
 ### `src/config/`
 
