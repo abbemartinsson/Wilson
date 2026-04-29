@@ -36,6 +36,7 @@
     "axios": "^1.13.6",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
+    "concurrently": "^8.0.0",
     "pdfkit": "^0.13.0"
   },
   "devDependencies": {
