@@ -122,6 +122,108 @@ class ChartGeneratorService {
     }
 
     /**
+     * Generate forecast chart (forecast line + confidence band)
+     * @param {Object} data - { forecast: [{ month: '2026-06', forecast: 123, min: 50, max: 200 }, ...] }
+     * @returns {Promise<Buffer>} PNG image buffer
+     */
+    async generateForecastChart(data) {
+        if (!data || !Array.isArray(data.forecast)) {
+            throw new Error('Data with forecast array is required');
+        }
+
+        const forecastEntries = data.forecast;
+        const monthShortNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+        const labels = forecastEntries.map((it) => {
+            const period = String(it.month || it.period || '') || '';
+            // expect YYYY-MM or YYYY-MM-DD
+            const parts = period.split('-');
+            if (parts.length >= 2) {
+                const year = parts[0];
+                const month = Number(parts[1]);
+                const short = monthShortNames[(month - 1) % 12] || parts[1];
+                return `${short} ${year}`;
+            }
+            return period;
+        });
+
+        const forecastData = forecastEntries.map((it) => Number(it.forecast || 0));
+        const minData = forecastEntries.map((it) => Number(it.min || 0));
+        const maxData = forecastEntries.map((it) => Number(it.max || 0));
+
+        const configuration = {
+            type: 'line',
+            data: {
+                labels,
+                datasets: [
+                    // max (top of band)
+                    {
+                        label: 'Max',
+                        data: maxData,
+                        borderWidth: 0,
+                        pointRadius: 0,
+                        backgroundColor: 'rgba(54, 162, 235, 0.24)',
+                        fill: false,
+                        order: 1,
+                    },
+                    // min (bottom of band) - fill to previous dataset (max) to create band
+                    {
+                        label: 'Min',
+                        data: minData,
+                        borderWidth: 0,
+                        pointRadius: 0,
+                        backgroundColor: 'rgba(54, 162, 235, 0.24)',
+                        fill: '-1',
+                        order: 1,
+                    },
+                    // forecast line on top
+                    {
+                        label: 'Forecast',
+                        data: forecastData,
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.05)',
+                        borderWidth: 2,
+                        tension: 0.36,
+                        pointRadius: 3,
+                        pointBackgroundColor: 'rgba(54,162,235,1)',
+                        fill: false,
+                        order: 2,
+                    },
+                ],
+            },
+            options: {
+                responsive: false,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: { display: false },
+                    title: {
+                        display: true,
+                        text: 'Forecast',
+                        font: { size: 14 },
+                    },
+                },
+                scales: {
+                    x: {
+                        ticks: {
+                            maxRotation: 45,
+                            minRotation: 45,
+                            font: { size: 10 },
+                        },
+                        grid: { display: false },
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: { color: 'rgba(0,0,0,0.06)' },
+                        title: { display: true, text: 'Hours' },
+                    },
+                },
+            },
+        };
+
+        return this.chartJSNodeCanvas.renderToBuffer(configuration, 'image/png');
+    }
+
+    /**
      * Generate chart for full monthly historical workload.
      * @param {Object} data - Report data from getFullHistoricalWorkload
      * @returns {Promise<Buffer>} PNG image buffer

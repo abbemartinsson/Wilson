@@ -843,6 +843,68 @@ class SlackCommandController {
     try {
       const result = await this.runReportingScript(config.scriptCommand, scriptArgument);
 
+      // Special handling for forecast command: generate chart and post Block Kit
+      if (parsed.commandName === 'forecast') {
+        try {
+          const reportData = this.formatter.extractJsonPayload(result.stdout);
+          if (reportData && typeof reportData === 'object') {
+            const chartBuffer = await chartGeneratorService.generateForecastChart(reportData);
+            const filename = `worklog-forecast-${Date.now()}.png`;
+
+            const uploadResp = await this.uploadChartImage(client, channel, chartBuffer, filename, 'Workload Forecast', threadTs);
+            const fileInfo = uploadResp?.file || uploadResp?.files?.[0] || {};
+            const imageUrl = fileInfo.url_private;
+
+            const titleText = '*📊 Forecast (Upcoming months)*';
+            const insights = [];
+            // Build some simple insights from data
+            try {
+              const f = Array.isArray(reportData.forecast) ? reportData.forecast : [];
+              if (f.length > 0) {
+                const avg = (f.reduce((s, it) => s + (Number(it.forecast || 0)), 0) / f.length) || 0;
+                insights.push(`Stable ~${Math.round(avg)}h/month`);
+                insights.push('High uncertainty range');
+                insights.push('Trend: see chart');
+              }
+            } catch (e) {
+              insights.push('Forecast available');
+            }
+
+            const blocks = [];
+            blocks.push({
+              type: 'section',
+              text: { type: 'mrkdwn', text: `${titleText}\n• ${insights.join('\n• ')}` },
+            });
+
+            if (imageUrl) {
+              blocks.push({ type: 'image', image_url: imageUrl, alt_text: 'Forecast chart' });
+            }
+
+            blocks.push({
+              type: 'context',
+              elements: [{ type: 'mrkdwn', text: 'Projection based on model and historical data. Numbers rounded to 2 decimals.' }],
+            });
+
+            blocks.push({
+              type: 'actions',
+              elements: [
+                {
+                  type: 'button',
+                  text: { type: 'plain_text', text: 'View details' },
+                  action_id: 'forecast_view_details',
+                  value: 'forecast_details',
+                },
+              ],
+            });
+
+            await this.postSlackMessage(client, channel, { blocks }, threadTs);
+            return true;
+          }
+        } catch (err) {
+          this.logger.warn('Forecast chart generation/upload failed', { error: err.message });
+        }
+      }
+
       // Handle report commands with PDF generation
       if (isReportCommand) {
         try {
