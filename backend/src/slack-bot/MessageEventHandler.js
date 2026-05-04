@@ -96,7 +96,7 @@ class MessageEventHandler {
       const isDmChannel =
         event.channel_type === 'im' ||
         (typeof event.channel === 'string' && event.channel.startsWith('D'));
-      const replyThreadTs = event.thread_ts || event.ts || null;
+      const replyThreadTs = event.thread_ts || null;
 
       if (isDmChannel) {
         const hasAccess = await this.ensureSlackAccess(event, client, replyThreadTs);
