@@ -22,6 +22,8 @@ const UserCostSetupFlow = require('./flows/UserCostSetupFlow');
 const WorklogSetupFlow = require('./flows/WorklogSetupFlow');
 const TimesheetReminderSetupFlow = require('./flows/TimesheetReminderSetupFlow');
 
+const chartGeneratorService = require('../services/chartGeneratorService');
+
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const REPORTING_SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'reporting.js');
 const COMMAND_TIMEOUT_MS = Number.parseInt(process.env.SLACK_COMMAND_TIMEOUT_MS, 10) || 60000;
@@ -862,6 +864,55 @@ class SlackCommandController {
         }
       }
 
+      if (parsed.commandName === 'history' || parsed.commandName === 'full history') {
+        const isFullHistoryCommand = parsed.commandName === 'full history';
+        const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
+        const stderrRaw = String(result.stderr || '').trim();
+        const stderr = stderrRaw ? this.formatter.clipText(this.formatter.formatPlainLinesAsBullets(stderrRaw)) : '';
+
+        // For 'full history' we do not send any textual output — only the chart image.
+        if (!isFullHistoryCommand) {
+          if (stderr) {
+            const messages = this.buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
+            for (const message of messages) {
+              await this.postSlackMessage(client, channel, message, threadTs);
+            }
+          } else {
+            const messages = this.buildSplitPlainMessages(stdout);
+            for (const message of messages) {
+              await this.postSlackMessage(client, channel, message, threadTs);
+            }
+          }
+        }
+
+        try {
+          const reportData = this.formatter.extractJsonPayload(result.stdout);
+          if (reportData && typeof reportData === 'object') {
+            const chartBuffer = isFullHistoryCommand
+              ? await chartGeneratorService.generateFullHistoryChart(reportData)
+              : await chartGeneratorService.generateHistoricalComparisonChart(reportData);
+            const filename = isFullHistoryCommand
+              ? `worklog-full-history-${Date.now()}.png`
+              : `worklog-history-${Date.now()}.png`;
+
+            await this.uploadChartImage(
+              client,
+              channel,
+              chartBuffer,
+              filename,
+              isFullHistoryCommand ? 'Worklog Full History Chart' : 'Worklog History Chart',
+              threadTs
+            );
+          }
+        } catch (chartError) {
+          logger.warn('Historical chart generation/upload failed', {
+            error: chartError.message,
+          });
+        }
+
+        return true;
+      }
+
       // Regular command handling
       const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
       const stderrRaw = String(result.stderr || '').trim();
@@ -958,6 +1009,28 @@ class SlackCommandController {
     }
 
     return this.reminderSetupFlow.handlePending(event, client);
+  }
+
+  /**
+   * Upload chart image to Slack
+   */
+  async uploadChartImage(client, channel, chartBuffer, filename, title, threadTs) {
+    try {
+      const response = await client.files.uploadV2({
+        channel_id: channel,
+        file: chartBuffer,
+        filename,
+        title,
+        thread_ts: threadTs,
+      });
+      return response;
+    } catch (error) {
+      this.logger.error('Failed to upload chart image', {
+        error: error.message,
+        filename,
+      });
+      throw error;
+    }
   }
 }
 

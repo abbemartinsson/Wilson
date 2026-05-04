@@ -361,6 +361,39 @@ class OutputFormatter {
     return lines.filter(Boolean).join('\n');
   }
 
+  formatFullHistory(report) {
+    if (!report || typeof report !== 'object') {
+      return this.formatPlainLinesAsBullets(report);
+    }
+
+    const monthlyPeriods = Array.isArray(report.monthly_periods) ? report.monthly_periods : [];
+
+    const lines = [
+      `• 📚 Full history (${this.formatNumber(monthlyPeriods.length, 0)} months with data)`,
+    ];
+
+    if (report.summary) {
+      lines.push(this.formatDetailLine('Total hours', `${this.formatNumber(report.summary.total_hours ?? 0)} h`));
+      lines.push(this.formatDetailLine('Contributors', this.formatNumber(report.summary.unique_contributors ?? 0)));
+      lines.push(this.formatDetailLine('Worklogs', this.formatNumber(report.summary.total_worklogs ?? 0)));
+      if (report.summary.first_period && report.summary.last_period) {
+        lines.push(this.formatDetailLine('Range', `${this.escapeMrkdwn(report.summary.first_period)} to ${this.escapeMrkdwn(report.summary.last_period)}`));
+      }
+    }
+
+    if (monthlyPeriods.length > 0) {
+      lines.push('');
+      lines.push('  Monthly breakdown:');
+      for (const period of monthlyPeriods) {
+        lines.push(
+          `    - ${this.formatInlineCode(`${this.escapeMrkdwn(period.period || 'unknown')}: ${this.formatNumber(period.total_hours ?? 0)} h, ${this.formatNumber(period.active_users ?? 0)} contributors`)}`
+        );
+      }
+    }
+
+    return lines.join('\n');
+  }
+
   formatCommandOutput(commandName, rawOutput) {
     const parsedOutput = this.extractJsonPayload(rawOutput);
 
@@ -402,6 +435,10 @@ class OutputFormatter {
 
     if (commandName === 'history') {
       return this.formatHistoricalComparison(parsedOutput);
+    }
+
+    if (commandName === 'full history') {
+      return this.formatFullHistory(parsedOutput);
     }
 
     if (Array.isArray(parsedOutput)) {

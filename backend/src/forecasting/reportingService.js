@@ -63,24 +63,24 @@ function roundToTwoDecimals(value) {
 }
 
 async function searchProjects(query) {
-  const projects = await analyticsRepository.searchProjects(query);
+	const projects = await analyticsRepository.searchProjects(query);
 
-  return projects.map(p => ({
-    projectId: p.id,
-    projectKey: p.jira_project_key,
-    projectName: p.name,
-  }));
+	return projects.map(p => ({
+		projectId: p.id,
+		projectKey: p.jira_project_key,
+		projectName: p.name,
+	}));
 }
 
 async function getAllProjects() {
-  const projects = await analyticsRepository.getAllProjects();
+	const projects = await analyticsRepository.getAllProjects();
 
-  return projects.map(p => ({
-    projectId: p.id,
-    projectKey: p.jira_project_key,
-    projectName: p.name,
-    startDate: p.start_date,
-  }));
+	return projects.map(p => ({
+		projectId: p.id,
+		projectKey: p.jira_project_key,
+		projectName: p.name,
+		startDate: p.start_date,
+	}));
 }
 
 async function getProjectLastWeekHours(input) {
@@ -255,7 +255,7 @@ async function getWorkloadForecast(forecastMonths = 3) {
 		const forecast = await forecastService.getComprehensiveWorkloadForecast({
 			forecastMonths
 		});
-		
+
 		return {
 			forecast: forecast.forecast,
 			historical: forecast.historical,
@@ -282,7 +282,7 @@ async function getWorkloadForecast(forecastMonths = 3) {
 async function getHistoricalWorkloadComparison(options = {}) {
 	try {
 		const comparison = await analyticsService.getHistoricalComparison(options);
-		
+
 		return {
 			current_period: {
 				year: comparison.current_period.year,
@@ -321,6 +321,88 @@ async function getHistoricalWorkloadComparison(options = {}) {
 }
 
 /**
+ * Get full historical monthly workload across all available data.
+ * Returns monthly hours and active contributors for each month with data.
+ *
+ * @returns {Promise<Object>} Full historical monthly report
+ */
+async function getFullHistoricalWorkload() {
+	try {
+		const worklogs = await analyticsRepository.getAllWorklogsForForecast();
+
+		if (!Array.isArray(worklogs) || worklogs.length === 0) {
+			return {
+				monthly_periods: [],
+				summary: {
+					months_with_data: 0,
+					total_hours: 0,
+					total_worklogs: 0,
+					unique_contributors: 0,
+					first_period: null,
+					last_period: null,
+				},
+			};
+		}
+
+		const monthlyMap = new Map();
+		const globalContributors = new Set();
+
+		for (const worklog of worklogs) {
+			if (!worklog?.started_at) {
+				continue;
+			}
+
+			const startedAt = new Date(worklog.started_at);
+			const dateParts = getDatePartsInTimeZone(startedAt, 'Europe/Stockholm');
+			const period = `${dateParts.year}-${String(dateParts.month).padStart(2, '0')}`;
+
+			if (!monthlyMap.has(period)) {
+				monthlyMap.set(period, {
+					totalSeconds: 0,
+					activeUsers: new Set(),
+					worklogCount: 0,
+				});
+			}
+
+			const monthEntry = monthlyMap.get(period);
+			monthEntry.totalSeconds += worklog.time_spent_seconds || 0;
+			monthEntry.worklogCount += 1;
+			if (worklog.user_id !== undefined && worklog.user_id !== null) {
+				monthEntry.activeUsers.add(worklog.user_id);
+				globalContributors.add(worklog.user_id);
+			}
+		}
+
+		const monthlyPeriods = Array.from(monthlyMap.entries())
+			.sort(([left], [right]) => left.localeCompare(right))
+			.map(([period, values]) => ({
+				period,
+				total_hours: roundToTwoDecimals(values.totalSeconds / 3600),
+				active_users: values.activeUsers.size,
+				worklog_count: values.worklogCount,
+			}));
+
+		const totalHours = monthlyPeriods.reduce((sum, item) => sum + (item.total_hours || 0), 0);
+		const totalWorklogs = monthlyPeriods.reduce((sum, item) => sum + (item.worklog_count || 0), 0);
+
+		return {
+			monthly_periods: monthlyPeriods,
+			summary: {
+				months_with_data: monthlyPeriods.length,
+				total_hours: roundToTwoDecimals(totalHours),
+				total_worklogs: totalWorklogs,
+				unique_contributors: globalContributors.size,
+				first_period: monthlyPeriods.length > 0 ? monthlyPeriods[0].period : null,
+				last_period: monthlyPeriods.length > 0 ? monthlyPeriods[monthlyPeriods.length - 1].period : null,
+			},
+		};
+	} catch (error) {
+		console.error('Error in getFullHistoricalWorkload:', error);
+		throw error;
+	}
+}
+
+/**
  * Get workload analytics for a specific time period.
  * 
  * @param {Object} options - Analytics options
@@ -331,7 +413,7 @@ async function getHistoricalWorkloadComparison(options = {}) {
 async function getWorkloadAnalytics(options = {}) {
 	try {
 		const analytics = await analyticsService.getWorkloadAnalytics(options);
-		
+
 		return {
 			summary: {
 				total_hours: analytics.total_hours,
@@ -541,17 +623,17 @@ async function getProjectTeamWeeklyReport(projectKey, period = 'week', monthNumb
 function getRecentPeriodRangeInStockholm(period, referenceDate = new Date()) {
 	const stockholmToday = getDatePartsInTimeZone(referenceDate, 'Europe/Stockholm');
 	const stockholmTodayDate = new Date(Date.UTC(stockholmToday.year, stockholmToday.month - 1, stockholmToday.day));
-	
+
 	if (period === 'month') {
 		// For monthly reports, use previous calendar month
 		let year = stockholmToday.year;
 		let month = stockholmToday.month - 1;
-		
+
 		if (month < 1) {
 			month = 12;
 			year -= 1;
 		}
-		
+
 		return getMonthRangeInStockholm(year, month);
 	}
 
@@ -621,6 +703,7 @@ module.exports = {
 	getProjectLastWeekHours,
 	getWorkloadForecast,
 	getHistoricalWorkloadComparison,
+	getFullHistoricalWorkload,
 	getWorkloadAnalytics,
 	getProjectParticipants,
 	getProjectWeeklyReport,

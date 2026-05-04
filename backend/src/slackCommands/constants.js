@@ -70,6 +70,11 @@ const commandMap = {
     usage: 'history [month]',
     inputMode: 'historical-month',
   },
+  'full history': {
+    scriptCommand: 'full-historical',
+    requiresText: false,
+    usage: 'full history',
+  },
   'reminder setup': {
     customHandler: 'timesheet-reminder-setup',
     usage: 'reminder setup',
@@ -104,6 +109,7 @@ const ROLE_PERMISSION_CONFIG = {
       'forecast',
       'project team',
       'history',
+      'full history',
       'worklog',
       'reminder setup',
       'reminder update',
@@ -124,6 +130,7 @@ const ROLE_PERMISSION_CONFIG = {
       'forecast',
       'project team',
       'history',
+      'full history',
       'worklog',
       'reminder setup',
       'reminder update',
@@ -154,6 +161,7 @@ const COMMAND_USAGE_TEXT = {
   projects: 'projects',
   forecast: 'forecast [months 1-12]',
   history: 'history [month]',
+  'full history': 'full history',
   'reminder setup': 'reminder setup',
   'reminder update': 'reminder update',
   'reminder status': 'reminder status',
@@ -175,6 +183,7 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   projects: 'Lists all active projects.',
   forecast: 'Shows forward forecast.',
   history: 'Compares with previous years.',
+  'full history': 'Shows all months with hours and contributors.',
   'reminder setup': 'Sets up reminders.',
   'reminder update': 'Updates reminders.',
   'reminder status': 'Shows reminder status.',
@@ -200,7 +209,7 @@ const HELP_COMMAND_GROUPS = [
   {
     title: 'Forecast and History',
     emoji: '📈',
-    commands: ['forecast', 'history'],
+    commands: ['forecast', 'history', 'full history'],
   },
   {
     title: 'Reminder',
