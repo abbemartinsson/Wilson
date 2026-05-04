@@ -1,4 +1,4 @@
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const analyticsService = require('./analyticsService');
@@ -8,6 +8,7 @@ function resolvePythonExecutable() {
 		return process.env.PYTHON_EXECUTABLE;
 	}
 
+	// Check for common virtualenv locations first
 	const venvWindows = path.join(__dirname, '../../../.venv/Scripts/python.exe');
 	const venvPosix = path.join(__dirname, '../../../.venv/bin/python');
 
@@ -19,7 +20,27 @@ function resolvePythonExecutable() {
 		return venvPosix;
 	}
 
-	return 'python';
+	// Helper: check if an executable is available by running `--version`
+	function isExecutableAvailable(cmd) {
+		try {
+			const res = spawnSync(cmd, ['--version'], { stdio: 'ignore' });
+			return res && res.status === 0;
+		} catch (e) {
+			return false;
+		}
+	}
+
+	// Prefer 'python3' on many Linux environments (including Railway); fall back to 'python'
+	if (isExecutableAvailable('python3')) {
+		return 'python3';
+	}
+
+	if (isExecutableAvailable('python')) {
+		return 'python';
+	}
+
+	// Last resort: return 'python3' (will likely fail fast and surface a clear error)
+	return 'python3';
 }
 
 /**
