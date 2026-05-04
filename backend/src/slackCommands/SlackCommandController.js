@@ -885,9 +885,6 @@ class SlackCommandController {
               const blocks = [];
               blocks.push({ type: 'image', image_url: imageUrl, alt_text: 'Forecast chart' });
               await this.postSlackMessage(client, channel, { blocks }, threadTs);
-            } else {
-              // If image URL is missing, inform the channel
-              await this.postSlackMessage(client, channel, this.buildPlainMessagePayload('⚠️ Forecast chart uploaded but no preview URL available. Check app scopes and channel permissions.'), threadTs);
             }
           }
         } catch (err) {
