@@ -140,11 +140,31 @@ class SlackCommandController {
   }
 
   buildMessagePayload(_title, body, _isError = false) {
+    if (_isError) {
+      return this.buildPlainMessagePayload('Command failed. Please try again later.', true);
+    }
+
     const safeBody = body && body.trim() ? body.trim() : 'No output.';
     return this.buildPlainMessagePayload(safeBody);
   }
 
-  buildPlainMessagePayload(body) {
+  buildPlainMessagePayload(body, _isError = false) {
+    if (_isError) {
+      const generic = 'Command failed. Please try again later.';
+      return {
+        text: generic,
+        blocks: [
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: generic,
+            },
+          },
+        ],
+      };
+    }
+
     const safeBody = body && body.trim() ? body.trim() : 'No output.';
 
     return {
@@ -162,6 +182,10 @@ class SlackCommandController {
   }
 
   buildMultiMessagePayload(_title, body, _isError = false, options = {}) {
+    if (_isError) {
+      return [this.buildPlainMessagePayload('Command failed. Please try again later.', true)];
+    }
+
     const safeBody = body && body.trim() ? body.trim() : 'No output.';
     const maxLinesPerMessage = Number.parseInt(options.maxLinesPerMessage, 10) || 4;
     const lines = safeBody.split('\n');
@@ -171,15 +195,7 @@ class SlackCommandController {
     }
 
     const messages = [];
-    let currentContent = [];
-
-    for (let i = 0; i < Math.min(maxLinesPerMessage, lines.length); i += 1) {
-      currentContent.push(lines[i]);
-    }
-
-    messages.push(this.buildPlainMessagePayload(currentContent.join('\n')));
-
-    for (let i = maxLinesPerMessage; i < lines.length; i += maxLinesPerMessage) {
+    for (let i = 0; i < lines.length; i += maxLinesPerMessage) {
       const chunk = lines.slice(i, Math.min(i + maxLinesPerMessage, lines.length)).join('\n');
       messages.push(this.buildPlainMessagePayload(chunk));
     }
@@ -855,7 +871,8 @@ class SlackCommandController {
           });
 
           const errorMessage = this.buildPlainMessagePayload(
-            `⚠️ PDF upload failed: ${pdfError.message || 'Unknown error.'}`
+            '⚠️ PDF upload failed. Please try again later.',
+            true
           );
           await this.postSlackMessage(client, channel, errorMessage, threadTs);
           return true;

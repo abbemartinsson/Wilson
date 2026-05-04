@@ -5,6 +5,10 @@ const analyticsService = require('./analyticsService');
 
 function resolvePythonExecutable() {
 	if (process.env.PYTHON_EXECUTABLE) {
+		if (path.isAbsolute(process.env.PYTHON_EXECUTABLE)) {
+			return fs.existsSync(process.env.PYTHON_EXECUTABLE) ? process.env.PYTHON_EXECUTABLE : null;
+		}
+
 		return process.env.PYTHON_EXECUTABLE;
 	}
 
@@ -30,7 +34,15 @@ function resolvePythonExecutable() {
 		}
 	}
 
-	// Prefer 'python3' on many Linux environments (including Railway); fall back to 'python'
+	const versionedCandidates = ['python3.12', 'python3.11', 'python3.10', 'python3.9'];
+
+	for (const candidate of versionedCandidates) {
+		if (isExecutableAvailable(candidate)) {
+			return candidate;
+		}
+	}
+
+	// Prefer 'python3' on Linux environments; fall back to 'python'
 	if (isExecutableAvailable('python3')) {
 		return 'python3';
 	}
@@ -39,8 +51,7 @@ function resolvePythonExecutable() {
 		return 'python';
 	}
 
-	// Last resort: return 'python3' (will likely fail fast and surface a clear error)
-	return 'python3';
+	return null;
 }
 
 /**
@@ -101,6 +112,11 @@ function runPythonForecast(inputData) {
 	return new Promise((resolve, reject) => {
 		const pythonScriptPath = path.join(__dirname, '../../python/workload_forecast.py');
 		const pythonExecutable = resolvePythonExecutable();
+
+		if (!pythonExecutable) {
+			reject(new Error('No Python executable found. Set PYTHON_EXECUTABLE or deploy Python 3 with backend/python/requirements.txt installed.'));
+			return;
+		}
 
 		// Spawn Python process
 		const pythonProcess = spawn(pythonExecutable, [pythonScriptPath]);
