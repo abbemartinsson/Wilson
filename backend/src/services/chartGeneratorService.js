@@ -151,7 +151,7 @@ class ChartGeneratorService {
             max: Number(it.max ?? it.upper_bound ?? it.max_pred ?? 0),
         }));
 
-        const monthShortNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+        const monthShortNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
         const labels = forecastEntries.map((it) => {
             const period = String(it.month || it.period || '') || '';
@@ -175,27 +175,7 @@ class ChartGeneratorService {
             data: {
                 labels,
                 datasets: [
-                    // max (top of band)
-                    {
-                        label: 'Max',
-                        data: maxData,
-                        borderWidth: 0,
-                        pointRadius: 0,
-                        backgroundColor: 'rgba(54, 162, 235, 0.24)',
-                        fill: false,
-                        order: 1,
-                    },
-                    // min (bottom of band) - fill to previous dataset (max) to create band
-                    {
-                        label: 'Min',
-                        data: minData,
-                        borderWidth: 0,
-                        pointRadius: 0,
-                        backgroundColor: 'rgba(54, 162, 235, 0.24)',
-                        fill: '-1',
-                        order: 1,
-                    },
-                    // forecast line on top
+                    // forecast line only (no range band)
                     {
                         label: 'Forecast',
                         data: forecastData,
@@ -206,7 +186,6 @@ class ChartGeneratorService {
                         pointRadius: 3,
                         pointBackgroundColor: 'rgba(54,162,235,1)',
                         fill: false,
-                        order: 2,
                     },
                 ],
             },
