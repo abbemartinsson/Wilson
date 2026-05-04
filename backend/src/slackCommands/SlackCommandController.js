@@ -843,8 +843,26 @@ class SlackCommandController {
     try {
       const result = await this.runReportingScript(config.scriptCommand, scriptArgument);
 
-      // Special handling for forecast command: generate chart and post Block Kit
+      // Special handling for forecast command: post text output, then generate chart
       if (parsed.commandName === 'forecast') {
+        const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
+        const stderrRaw = String(result.stderr || '').trim();
+        const stderr = stderrRaw ? this.formatter.clipText(this.formatter.formatPlainLinesAsBullets(stderrRaw)) : '';
+
+        // Post text output first
+        if (stderr) {
+          const messages = this.buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
+          }
+        } else {
+          const messages = this.buildSplitPlainMessages(stdout);
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
+          }
+        }
+
+        // Then generate and post chart
         try {
           const reportData = this.formatter.extractJsonPayload(result.stdout);
           if (reportData && typeof reportData === 'object') {
@@ -863,62 +881,20 @@ class SlackCommandController {
             const fileInfo = uploadResp?.file || uploadResp?.files?.[0] || {};
             const imageUrl = fileInfo.url_private;
 
-            const titleText = '*📊 Forecast (Upcoming months)*';
-            const insights = [];
-            // Build some simple insights from data
-            try {
-              const f = Array.isArray(reportData.forecast)
-                ? reportData.forecast
-                : (reportData?.forecast?.monthly_forecast || reportData?.monthly_forecast || []);
-
-              if (f.length > 0) {
-                // normalize predicted values if needed
-                const values = f.map((it) => Number(it.forecast ?? it.predicted_hours ?? it.predicted ?? it.value ?? 0));
-                const avg = values.reduce((s, v) => s + v, 0) / (values.length || 1);
-                insights.push(`Stable ~${Math.round(avg)}h/month`);
-                insights.push('High uncertainty range');
-                insights.push('Trend: see chart');
-              }
-            } catch (e) {
-              insights.push('Forecast available');
-            }
-
-            const blocks = [];
-            blocks.push({
-              type: 'section',
-              text: { type: 'mrkdwn', text: `${titleText}\n• ${insights.join('\n• ')}` },
-            });
-
             if (imageUrl) {
+              const blocks = [];
               blocks.push({ type: 'image', image_url: imageUrl, alt_text: 'Forecast chart' });
+              await this.postSlackMessage(client, channel, { blocks }, threadTs);
             } else {
               // If image URL is missing, inform the channel
               await this.postSlackMessage(client, channel, this.buildPlainMessagePayload('⚠️ Forecast chart uploaded but no preview URL available. Check app scopes and channel permissions.'), threadTs);
             }
-
-            blocks.push({
-              type: 'context',
-              elements: [{ type: 'mrkdwn', text: 'Projection based on model and historical data. Numbers rounded to 2 decimals.' }],
-            });
-
-            blocks.push({
-              type: 'actions',
-              elements: [
-                {
-                  type: 'button',
-                  text: { type: 'plain_text', text: 'View details' },
-                  action_id: 'forecast_view_details',
-                  value: 'forecast_details',
-                },
-              ],
-            });
-
-            await this.postSlackMessage(client, channel, { blocks }, threadTs);
-            return true;
           }
         } catch (err) {
           this.logger.warn('Forecast chart generation/upload failed', { error: err.message });
         }
+
+        return true;
       }
 
       // Handle report commands with PDF generation
