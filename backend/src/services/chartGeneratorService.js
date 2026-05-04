@@ -127,11 +127,30 @@ class ChartGeneratorService {
      * @returns {Promise<Buffer>} PNG image buffer
      */
     async generateForecastChart(data) {
-        if (!data || !Array.isArray(data.forecast)) {
+        // Accept multiple possible shapes from reporting service:
+        // - { forecast: [ { month, forecast, min, max } ] }
+        // - { forecast: { monthly_forecast: [ { month, predicted_hours, lower_bound, upper_bound } ] } }
+        // - { monthly_forecast: [ ... ] }
+        let rawEntries = [];
+        if (Array.isArray(data.forecast)) {
+            rawEntries = data.forecast;
+        } else if (data && data.forecast && Array.isArray(data.forecast.monthly_forecast)) {
+            rawEntries = data.forecast.monthly_forecast;
+        } else if (Array.isArray(data.monthly_forecast)) {
+            rawEntries = data.monthly_forecast;
+        }
+
+        if (!Array.isArray(rawEntries) || rawEntries.length === 0) {
             throw new Error('Data with forecast array is required');
         }
 
-        const forecastEntries = data.forecast;
+        const forecastEntries = rawEntries.map((it) => ({
+            month: it.month || it.period || it.date || '',
+            forecast: Number(it.forecast ?? it.predicted_hours ?? it.predicted ?? it.value ?? 0),
+            min: Number(it.min ?? it.lower_bound ?? it.min_pred ?? 0),
+            max: Number(it.max ?? it.upper_bound ?? it.max_pred ?? 0),
+        }));
+
         const monthShortNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
         const labels = forecastEntries.map((it) => {

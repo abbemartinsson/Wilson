@@ -851,7 +851,15 @@ class SlackCommandController {
             const chartBuffer = await chartGeneratorService.generateForecastChart(reportData);
             const filename = `worklog-forecast-${Date.now()}.png`;
 
-            const uploadResp = await this.uploadChartImage(client, channel, chartBuffer, filename, 'Workload Forecast', threadTs);
+            let uploadResp;
+            try {
+              uploadResp = await this.uploadChartImage(client, channel, chartBuffer, filename, 'Workload Forecast', threadTs);
+            } catch (uploadErr) {
+              this.logger.warn('Forecast image upload failed', { error: uploadErr && uploadErr.message });
+              await this.postSlackMessage(client, channel, this.buildPlainMessagePayload('⚠️ Could not upload forecast chart. Please ensure the bot has `files:write` scope and try again.'), threadTs);
+              return true;
+            }
+
             const fileInfo = uploadResp?.file || uploadResp?.files?.[0] || {};
             const imageUrl = fileInfo.url_private;
 
@@ -859,9 +867,14 @@ class SlackCommandController {
             const insights = [];
             // Build some simple insights from data
             try {
-              const f = Array.isArray(reportData.forecast) ? reportData.forecast : [];
+              const f = Array.isArray(reportData.forecast)
+                ? reportData.forecast
+                : (reportData?.forecast?.monthly_forecast || reportData?.monthly_forecast || []);
+
               if (f.length > 0) {
-                const avg = (f.reduce((s, it) => s + (Number(it.forecast || 0)), 0) / f.length) || 0;
+                // normalize predicted values if needed
+                const values = f.map((it) => Number(it.forecast ?? it.predicted_hours ?? it.predicted ?? it.value ?? 0));
+                const avg = values.reduce((s, v) => s + v, 0) / (values.length || 1);
                 insights.push(`Stable ~${Math.round(avg)}h/month`);
                 insights.push('High uncertainty range');
                 insights.push('Trend: see chart');
@@ -878,6 +891,9 @@ class SlackCommandController {
 
             if (imageUrl) {
               blocks.push({ type: 'image', image_url: imageUrl, alt_text: 'Forecast chart' });
+            } else {
+              // If image URL is missing, inform the channel
+              await this.postSlackMessage(client, channel, this.buildPlainMessagePayload('⚠️ Forecast chart uploaded but no preview URL available. Check app scopes and channel permissions.'), threadTs);
             }
 
             blocks.push({
