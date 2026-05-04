@@ -14,9 +14,12 @@ RUN npm ci --omit=dev
 
 COPY backend ./
 
-RUN pip3 install --no-cache-dir -r python/requirements.txt
+RUN python3 -m venv /opt/venv \
+  && /opt/venv/bin/python -m pip install --upgrade pip setuptools wheel \
+  && /opt/venv/bin/pip install --no-cache-dir -r python/requirements.txt
 
-ENV PYTHON_EXECUTABLE=python3
+ENV PYTHON_EXECUTABLE=/opt/venv/bin/python
+ENV PATH=/opt/venv/bin:$PATH
 ENV PORT=3000
 
 EXPOSE 3000
