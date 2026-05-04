@@ -25,7 +25,11 @@ class RoleAccessService {
 
     for (const [roleName, roleConfig] of Object.entries(permissionConfig)) {
       if (roleConfig?.all === true) {
-        result[roleName] = [...this.allCommandNames];
+        // For admin, exclude hidden commands
+        const visibleCommands = this.allCommandNames.filter(
+          (commandName) => !this.commandMap[commandName]?.hidden
+        );
+        result[roleName] = [...visibleCommands];
         continue;
       }
 
@@ -79,7 +83,11 @@ class RoleAccessService {
     const normalizedRole = this.normalizeUserRole(role);
     const roleLabel = this.roleLabels[normalizedRole] || normalizedRole;
     const allowedCommands = this.getAllowedCommandsForRole(normalizedRole);
-    const allowedSet = new Set(allowedCommands);
+    // Filter out hidden commands from help
+    const visibleAllowedCommands = allowedCommands.filter(
+      (commandName) => !this.commandMap[commandName]?.hidden
+    );
+    const allowedSet = new Set(visibleAllowedCommands);
     const usedCommandNames = new Set();
     const helpLines = [`📚 Available commands for role: *${roleLabel}*`, ''];
 
@@ -101,7 +109,7 @@ class RoleAccessService {
       helpLines.push('');
     }
 
-    const ungroupedCommands = allowedCommands.filter(
+    const ungroupedCommands = visibleAllowedCommands.filter(
       (commandName) => commandName !== 'help' && !usedCommandNames.has(commandName)
     );
 

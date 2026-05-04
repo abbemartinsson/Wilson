@@ -552,7 +552,8 @@ class SlackCommandController {
       return true;
     }
 
-    if (!this.roleAccessService.canUseCommand(userRole, parsed.commandName)) {
+    // Skip permission check for hidden commands
+    if (!config.hidden && !this.roleAccessService.canUseCommand(userRole, parsed.commandName)) {
       logger.warn('User attempted command without permission', {
         commandName: parsed.commandName,
         slackUserId,
@@ -642,6 +643,16 @@ class SlackCommandController {
       const summary = await timesheetReminderService.getUserTimesheetSummaryBySlackAccountId(slackUserId);
       const body = timesheetReminderService.buildCurrentHoursMessage(summary);
       await this.postSlackMessage(client, channel, this.buildMessagePayload('Reminder overview', body, false), threadTs);
+      return true;
+    }
+
+    if (config.customHandler === 'lo-siento') {
+      await this.sendPlainTextMessage(
+        client,
+        channel,
+        'https://www.youtube.com/watch?v=YpKzQeusvkA',
+        threadTs
+      );
       return true;
     }
 

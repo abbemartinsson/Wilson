@@ -86,6 +86,11 @@ const commandMap = {
     customHandler: 'timesheet-hours',
     usage: 'reminder hours',
   },
+  'lo siento': {
+    customHandler: 'lo-siento',
+    usage: 'lo siento',
+    hidden: true,
+  },
 };
 
 const ROLE_PERMISSION_CONFIG = {
