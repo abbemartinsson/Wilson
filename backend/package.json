@@ -32,6 +32,7 @@
   },
   "dependencies": {
     "@slack/bolt": "^3.22.0",
+    "@slack/oauth": "^2.6.3",
     "@supabase/supabase-js": "^2.0.0",
     "axios": "^1.13.6",
     "dotenv": "^16.6.1",

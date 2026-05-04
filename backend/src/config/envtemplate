@@ -18,6 +18,13 @@ SLACK_SOCKET_MODE=true
 SLACK_REPLY_IN_THREAD=false
 SLACK_ROUTER_MAX_MESSAGES=20
 
+# Slack OAuth (optional - for installing the bot in multiple workspaces)
+SLACK_ENABLE_OAUTH=false
+SLACK_CLIENT_ID=
+SLACK_CLIENT_SECRET=
+SLACK_OAUTH_STATE_SECRET=my-secret-state
+SLACK_OAUTH_REDIRECT_URI=http://localhost:3000/slack/oauth_redirect
+
 # Timesheet reminders
 ENABLE_TIMESHEET_REMINDERS=false
 TIMESHEET_REMINDER_TIME=09:00
