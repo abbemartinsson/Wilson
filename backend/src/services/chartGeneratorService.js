@@ -170,6 +170,14 @@ class ChartGeneratorService {
         const minData = forecastEntries.map((it) => Number(it.min || 0));
         const maxData = forecastEntries.map((it) => Number(it.max || 0));
 
+        // Calculate Y-axis bounds based on forecast data range with padding
+        const dataMin = Math.min(...forecastData);
+        const dataMax = Math.max(...forecastData);
+        const dataRange = dataMax - dataMin;
+        const padding = Math.max(dataRange * 0.1, 10); // 10% padding or minimum 10 hours
+        const yAxisMin = Math.max(0, dataMin - padding);
+        const yAxisMax = dataMax + padding;
+
         const configuration = {
             type: 'line',
             data: {
@@ -210,7 +218,8 @@ class ChartGeneratorService {
                         grid: { display: false },
                     },
                     y: {
-                        beginAtZero: true,
+                        min: yAxisMin,
+                        max: yAxisMax,
                         grid: { color: 'rgba(0,0,0,0.06)' },
                         title: { display: true, text: 'Hours' },
                     },
