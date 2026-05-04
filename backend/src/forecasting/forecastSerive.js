@@ -1,13 +1,18 @@
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
 const analyticsService = require('./analyticsService');
 
 function resolvePythonExecutable() {
 	if (process.env.PYTHON_EXECUTABLE) {
+		if (path.isAbsolute(process.env.PYTHON_EXECUTABLE)) {
+			return fs.existsSync(process.env.PYTHON_EXECUTABLE) ? process.env.PYTHON_EXECUTABLE : null;
+		}
+
 		return process.env.PYTHON_EXECUTABLE;
 	}
 
+	// Check for common virtualenv locations first
 	const venvWindows = path.join(__dirname, '../../../.venv/Scripts/python.exe');
 	const venvPosix = path.join(__dirname, '../../../.venv/bin/python');
 
@@ -19,7 +24,34 @@ function resolvePythonExecutable() {
 		return venvPosix;
 	}
 
-	return 'python';
+	// Helper: check if an executable is available by running `--version`
+	function isExecutableAvailable(cmd) {
+		try {
+			const res = spawnSync(cmd, ['--version'], { stdio: 'ignore' });
+			return res && res.status === 0;
+		} catch (e) {
+			return false;
+		}
+	}
+
+	const versionedCandidates = ['python3.12', 'python3.11', 'python3.10', 'python3.9'];
+
+	for (const candidate of versionedCandidates) {
+		if (isExecutableAvailable(candidate)) {
+			return candidate;
+		}
+	}
+
+	// Prefer 'python3' on Linux environments; fall back to 'python'
+	if (isExecutableAvailable('python3')) {
+		return 'python3';
+	}
+
+	if (isExecutableAvailable('python')) {
+		return 'python';
+	}
+
+	return null;
 }
 
 /**
@@ -80,6 +112,11 @@ function runPythonForecast(inputData) {
 	return new Promise((resolve, reject) => {
 		const pythonScriptPath = path.join(__dirname, '../../python/workload_forecast.py');
 		const pythonExecutable = resolvePythonExecutable();
+
+		if (!pythonExecutable) {
+			reject(new Error('No Python executable found. Set PYTHON_EXECUTABLE or deploy Python 3 with backend/python/requirements.txt installed.'));
+			return;
+		}
 
 		// Spawn Python process
 		const pythonProcess = spawn(pythonExecutable, [pythonScriptPath]);

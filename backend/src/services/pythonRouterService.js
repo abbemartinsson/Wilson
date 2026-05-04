@@ -1,9 +1,13 @@
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 
 function resolvePythonExecutable() {
   if (process.env.PYTHON_EXECUTABLE) {
+    if (path.isAbsolute(process.env.PYTHON_EXECUTABLE)) {
+      return fs.existsSync(process.env.PYTHON_EXECUTABLE) ? process.env.PYTHON_EXECUTABLE : null;
+    }
+
     return process.env.PYTHON_EXECUTABLE;
   }
 
@@ -18,13 +22,49 @@ function resolvePythonExecutable() {
     return venvPosix;
   }
 
-  return 'python';
+  const versionedCandidates = ['python3.12', 'python3.11', 'python3.10', 'python3.9'];
+
+  for (const candidate of versionedCandidates) {
+    try {
+      const result = spawnSync(candidate, ['--version'], { stdio: 'ignore' });
+      if (result && result.status === 0) {
+        return candidate;
+      }
+    } catch (error) {
+      // Continue to the next candidate.
+    }
+  }
+
+  try {
+    const result = spawnSync('python3', ['--version'], { stdio: 'ignore' });
+    if (result && result.status === 0) {
+      return 'python3';
+    }
+  } catch (error) {
+    // Continue to the next candidate.
+  }
+
+  try {
+    const result = spawnSync('python', ['--version'], { stdio: 'ignore' });
+    if (result && result.status === 0) {
+      return 'python';
+    }
+  } catch (error) {
+    // Continue to the fallback.
+  }
+
+  return null;
 }
 
 function askPythonRouter(messages) {
   return new Promise((resolve, reject) => {
     const scriptPath = path.join(__dirname, '../../python/supabase_chatbot.py');
     const pythonExecutable = resolvePythonExecutable();
+
+    if (!pythonExecutable) {
+      reject(new Error('No Python executable found. Set PYTHON_EXECUTABLE or deploy Python 3 with backend/python/requirements.txt installed.'));
+      return;
+    }
     const subprocessEnv = {
       ...process.env,
       PYTHONUTF8: '1',
