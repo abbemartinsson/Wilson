@@ -365,7 +365,7 @@ function buildReminderMessage(summary) {
 
   return [
     `You have reported ${targetHours} from the previous week. ${missingSentence}`,
-    'Do you want to do that now?',
+    'Don\'t forget to report your work hours!',
   ].join(' ');
 }
 
