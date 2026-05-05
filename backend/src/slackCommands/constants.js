@@ -173,7 +173,7 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   worklog: 'Logs time on one of your issues.',
   'project team': 'Shows project contributors.',
   projects: 'Lists all active projects.',
-  forecast: 'Shows forward forecast.',
+  forecast: 'Shows forward forecast. (might take a while)',
   history: 'Compares with previous years.',
   'reminder setup': 'Sets up reminders.',
   'reminder update': 'Updates reminders.',
