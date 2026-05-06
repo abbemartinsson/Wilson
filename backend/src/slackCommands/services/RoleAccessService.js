@@ -25,11 +25,20 @@ class RoleAccessService {
 
     for (const [roleName, roleConfig] of Object.entries(permissionConfig)) {
       if (roleConfig?.all === true) {
-        // For admin, exclude hidden commands
+        // For all-access roles, include all visible commands and optionally exclude configured ones.
         const visibleCommands = this.allCommandNames.filter(
           (commandName) => !this.commandMap[commandName]?.hidden
         );
-        result[roleName] = [...visibleCommands];
+        const excludedCommands = Array.isArray(roleConfig?.exclude) ? roleConfig.exclude : [];
+        const invalidExcludedNames = excludedCommands.filter((commandName) => !allCommandsSet.has(commandName));
+
+        if (invalidExcludedNames.length > 0) {
+          throw new Error(
+            `Invalid excluded command(s) in ROLE_PERMISSION_CONFIG for role "${roleName}": ${invalidExcludedNames.join(', ')}`
+          );
+        }
+
+        result[roleName] = visibleCommands.filter((commandName) => !excludedCommands.includes(commandName));
         continue;
       }
 

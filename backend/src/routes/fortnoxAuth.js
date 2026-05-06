@@ -10,6 +10,47 @@ const router = express.Router();
 const FORTNOX_AUTH_URL = process.env.FORTNOX_AUTH_URL || 'https://apps.fortnox.se/oauth-v1/auth';
 const FORTNOX_TOKEN_URL = process.env.FORTNOX_TOKEN_URL || 'https://apps.fortnox.se/oauth-v1/token';
 
+function getFortnoxOAuthConfig() {
+  return {
+    clientId: String(process.env.FORTNOX_CLIENT_ID || '').trim(),
+    clientSecret: String(process.env.FORTNOX_CLIENT_SECRET || '').trim(),
+    redirectUrl: String(process.env.FORTNOX_REDIRECT_URL || '').trim(),
+  };
+}
+
+router.get('/auth/fortnox/debug-config', (_req, res) => {
+  const enabled = String(process.env.FORTNOX_DEBUG_CONFIG_ENABLED || '').toLowerCase() === 'true';
+  if (!enabled) {
+    return res.status(404).json({ error: 'Not found' });
+  }
+
+  const { clientId, clientSecret, redirectUrl } = getFortnoxOAuthConfig();
+  let redirectUrlHost = null;
+  if (redirectUrl) {
+    try {
+      redirectUrlHost = new URL(redirectUrl).host;
+    } catch (_error) {
+      redirectUrlHost = 'invalid-url';
+    }
+  }
+
+  return res.json({
+    ok: true,
+    environment: process.env.NODE_ENV || 'unknown',
+    fortnox: {
+      hasClientId: Boolean(clientId),
+      hasClientSecret: Boolean(clientSecret),
+      hasRedirectUrl: Boolean(redirectUrl),
+      redirectUrlHost,
+    },
+    railway: {
+      hasRailwayPublicDomain: Boolean(String(process.env.RAILWAY_PUBLIC_DOMAIN || '').trim()),
+      hasRailwayStaticUrl: Boolean(String(process.env.RAILWAY_STATIC_URL || '').trim()),
+      hasRailwayDomain: Boolean(String(process.env.RAILWAY_DOMAIN || '').trim()),
+    },
+  });
+});
+
 router.get('/auth/fortnox/start', async (req, res) => {
   try {
     const slackUserId = String(req.query.slack_user_id || '').trim();
@@ -17,10 +58,23 @@ router.get('/auth/fortnox/start', async (req, res) => {
       return res.status(400).json({ error: 'slack_user_id is required as query param' });
     }
 
+    const { clientId, redirectUrl } = getFortnoxOAuthConfig();
+    if (!clientId || !redirectUrl) {
+      return res.status(500).json({
+        error: 'Fortnox OAuth is not configured on server',
+        details: {
+          missing: [
+            ...(!clientId ? ['FORTNOX_CLIENT_ID'] : []),
+            ...(!redirectUrl ? ['FORTNOX_REDIRECT_URL'] : []),
+          ],
+        },
+      });
+    }
+
     const state = slackUserId;
     const params = new URLSearchParams({
-      client_id: process.env.FORTNOX_CLIENT_ID || '',
-      redirect_uri: process.env.FORTNOX_REDIRECT_URL || '',
+      client_id: clientId,
+      redirect_uri: redirectUrl,
       response_type: 'code',
       state,
     });
@@ -46,14 +100,19 @@ router.get('/auth/fortnox/callback', async (req, res) => {
       return res.status(400).json({ error: 'state is required' });
     }
 
+    const { clientId, clientSecret, redirectUrl } = getFortnoxOAuthConfig();
+    if (!clientId || !clientSecret || !redirectUrl) {
+      return res.status(500).send('Fortnox callback configuration missing on server');
+    }
+
     const tokenResp = await axios.post(
       FORTNOX_TOKEN_URL,
       new URLSearchParams({
         grant_type: 'authorization_code',
         code,
-        redirect_uri: process.env.FORTNOX_REDIRECT_URL || '',
-        client_id: process.env.FORTNOX_CLIENT_ID || '',
-        client_secret: process.env.FORTNOX_CLIENT_SECRET || '',
+        redirect_uri: redirectUrl,
+        client_id: clientId,
+        client_secret: clientSecret,
       }).toString(),
       { headers: { 'Content-Type': 'application/x-www-form-urlencoded' } }
     );

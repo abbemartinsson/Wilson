@@ -103,7 +103,10 @@ const commandMap = {
 };
 
 const ROLE_PERMISSION_CONFIG = {
-  admin: { all: true },
+  admin: {
+    all: true,
+    exclude: ['fortnox login'],
+  },
   member: {
     commands: [
       'help',
