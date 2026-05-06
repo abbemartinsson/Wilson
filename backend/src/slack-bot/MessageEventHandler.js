@@ -96,6 +96,7 @@ class MessageEventHandler {
       const isDmChannel =
         event.channel_type === 'im' ||
         (typeof event.channel === 'string' && event.channel.startsWith('D'));
+      // Only reply in a thread when the incoming message is already in a thread.
       const replyThreadTs = event.thread_ts || null;
 
       if (isDmChannel) {

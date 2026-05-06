@@ -200,6 +200,12 @@ async function main() {
       process.exit(0);
     }
 
+    if (command === 'full-historical') {
+      const report = await reportingService.getFullHistoricalWorkload();
+      console.log(JSON.stringify(report, null, 2));
+      process.exit(0);
+    }
+
     if (command === 'workload-analytics') {
       const monthsBack = parsePositiveInt(process.argv[3], 6);
 
@@ -227,6 +233,7 @@ async function main() {
     console.error('  list-projects');
     console.error('  workload-forecast [MONTHS]');
     console.error('  historical-comparison [MONTH] [YEAR] [YEARS_BACK]');
+    console.error('  full-historical');
     console.error('  workload-analytics [MONTHS_BACK]');
     process.exit(1);
   } catch (error) {

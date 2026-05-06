@@ -26,6 +26,7 @@
     "report:workload": "node src/scripts/reporting.js workload-forecast",
     "report:workload-forecast": "node src/scripts/reporting.js workload-forecast",
     "report:historical": "node src/scripts/reporting.js historical-comparison",
+    "report:full-historical": "node src/scripts/reporting.js full-historical",
     "report:analytics": "node src/scripts/reporting.js workload-analytics",
     "slack:test-dm": "node src/scripts/sendSlackTestMessage.js",
     "test": "jest"
@@ -35,9 +36,10 @@
     "@slack/oauth": "^2.6.3",
     "@supabase/supabase-js": "^2.0.0",
     "axios": "^1.13.6",
+    "chartjs-node-canvas": "^5.0.0",
+    "concurrently": "^8.0.0",
     "dotenv": "^16.6.1",
     "express": "^4.22.1",
-    "concurrently": "^8.0.0",
     "pdfkit": "^0.13.0"
   },
   "devDependencies": {
