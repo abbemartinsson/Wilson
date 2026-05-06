@@ -9,6 +9,7 @@ const router = express.Router();
 
 const FORTNOX_AUTH_URL = process.env.FORTNOX_AUTH_URL || 'https://apps.fortnox.se/oauth-v1/auth';
 const FORTNOX_TOKEN_URL = process.env.FORTNOX_TOKEN_URL || 'https://apps.fortnox.se/oauth-v1/token';
+const FORTNOX_OAUTH_SCOPE = String(process.env.FORTNOX_OAUTH_SCOPE || process.env.FORTNOX_SCOPE || '').trim();
 
 function getFortnoxOAuthConfig() {
   return {
@@ -72,12 +73,13 @@ router.get('/auth/fortnox/start', async (req, res) => {
     }
 
     const state = slackUserId;
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUrl,
-      response_type: 'code',
-      state,
-    });
+    const scope = FORTNOX_OAUTH_SCOPE || '';
+    const params = new URLSearchParams();
+    params.append('client_id', clientId);
+    params.append('redirect_uri', redirectUrl);
+    params.append('response_type', 'code');
+    params.append('state', state);
+    if (scope) params.append('scope', scope);
 
     const fortnoxAuthUrl = `${FORTNOX_AUTH_URL}?${params.toString()}`;
     return res.redirect(fortnoxAuthUrl);
@@ -89,6 +91,14 @@ router.get('/auth/fortnox/start', async (req, res) => {
 
 router.get('/auth/fortnox/callback', async (req, res) => {
   try {
+    if (req.query.error) {
+      const err = String(req.query.error || '');
+      const desc = String(req.query.error_description || '');
+      const state = String(req.query.state || '');
+      console.error('Fortnox OAuth error callback:', err, desc, 'state:', state);
+      return res.status(400).send(`<html><body><h2>Fortnox OAuth error</h2><p>${err}: ${desc}</p><p>state: ${state}</p></body></html>`);
+    }
+
     const code = String(req.query.code || '').trim();
     const state = String(req.query.state || '').trim();
 
