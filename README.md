@@ -15,4 +15,4 @@ Wilson streamlines how teams manage work and time:
 
 ## Screenshots
 
-![Slack Commands Example](screenshots/WilsonHelp.png)
+![Slack Commands Example](screenshots/WilsonHelp.PNG)
