@@ -662,7 +662,7 @@ class SlackCommandController {
       const messages = this.buildMultiMessagePayload(
         'Access denied',
         `You do not have permission for ${this.commandPrefix}${parsed.commandName}.\n\n${roleAwareHelpMessage}`,
-        true
+        false
       );
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
