@@ -235,18 +235,43 @@ class SlackCommandController {
     await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
   }
 
-  getFortnoxStartUrl(slackUserId) {
-    const appBaseUrl = String(process.env.APP_BASE_URL || '').trim().replace(/\/$/, '');
-    if (appBaseUrl) {
-      return `${appBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
+  getPublicBaseUrl() {
+    const explicitBaseUrl = String(process.env.APP_BASE_URL || '').trim().replace(/\/$/, '');
+    if (explicitBaseUrl) {
+      return explicitBaseUrl;
+    }
+
+    const explicitStartUrl = String(process.env.FORTNOX_START_URL || '').trim().replace(/\/$/, '');
+    if (explicitStartUrl) {
+      return explicitStartUrl.replace(/\/auth\/fortnox\/start\/?$/, '');
     }
 
     const redirectUrl = String(process.env.FORTNOX_REDIRECT_URL || '').trim();
     if (redirectUrl) {
       const inferredBaseUrl = redirectUrl.replace(/\/auth\/fortnox\/callback\/?$/, '').replace(/\/auth\/fortnox\/start\/?$/, '');
       if (inferredBaseUrl) {
-        return `${inferredBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
+        return inferredBaseUrl;
       }
+    }
+
+    const railwayDomain =
+      String(process.env.RAILWAY_PUBLIC_DOMAIN || '').trim() ||
+      String(process.env.RAILWAY_STATIC_URL || '').trim() ||
+      String(process.env.RAILWAY_DOMAIN || '').trim();
+
+    if (railwayDomain) {
+      return railwayDomain.startsWith('http://') || railwayDomain.startsWith('https://')
+        ? railwayDomain.replace(/\/$/, '')
+        : `https://${railwayDomain.replace(/\/$/, '')}`;
+    }
+
+    return null;
+  }
+
+  getFortnoxStartUrl(slackUserId) {
+    const publicBaseUrl = this.getPublicBaseUrl();
+    if (publicBaseUrl) {
+      return `${publicBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
     }
 
     return null;
@@ -746,7 +771,7 @@ class SlackCommandController {
         await this.postSlackMessage(
           client,
           channel,
-          this.buildPlainMessagePayload('APP_BASE_URL or FORTNOX_REDIRECT_URL is not configured.'),
+          this.buildPlainMessagePayload('Could not resolve a public URL for Fortnox login. Set APP_BASE_URL, FORTNOX_START_URL, FORTNOX_REDIRECT_URL, or a Railway public domain variable.'),
           threadTs
         );
         return true;
