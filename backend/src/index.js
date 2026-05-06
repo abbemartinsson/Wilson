@@ -199,16 +199,21 @@ if (oauthHandler) {
 }
 
 // Fortnox OAuth endpoints
+let fortnoxAuthRouter = null;
 try {
-  const fortnoxAuth = require('./routes/fortnoxAuth');
-  app.use('/', fortnoxAuth);
+  fortnoxAuthRouter = require('./routes/fortnoxAuth');
+  app.use('/', fortnoxAuthRouter);
+  console.log('✓ Fortnox auth endpoints registered');
 } catch (e) {
-  console.warn('Fortnox auth router not loaded:', e.message);
+  console.error('✗ Fortnox auth router failed to load:', e.message, e.stack);
 }
 
 app.listen(port, () => {
   console.log(`Reporting API listening on port ${port}`);
   if (oauthHandler) {
     console.log(`Slack OAuth endpoints available at http://localhost:${port}/slack/install`);
+  }
+  if (fortnoxAuthRouter) {
+    console.log(`Fortnox OAuth endpoints available at http://localhost:${port}/auth/fortnox/start`);
   }
 });
