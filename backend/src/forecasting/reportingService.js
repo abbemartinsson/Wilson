@@ -90,6 +90,7 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 
 		for (const wl of worklogs) {
 			if (!wl || !wl.started_at) continue;
+			if (!wl.user_id) continue; // match getProjectCostReport: ignore worklogs without user_id
 			const started = new Date(wl.started_at);
 			const parts = getDatePartsInTimeZone(started, 'Europe/Stockholm');
 			const year = parts.year;
