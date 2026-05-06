@@ -429,6 +429,45 @@ class SlackCommandController {
     return { projectInput: normalizedInput, monthNumber: null };
   }
 
+  parseProjectCostInput(inputText) {
+    const normalizedInput = String(inputText || '').trim();
+    if (!normalizedInput) {
+      return { projectInput: normalizedInput, yearNumber: null };
+    }
+
+    const inputParts = normalizedInput.split(/\s+/);
+    if (inputParts.length < 2) {
+      return { projectInput: normalizedInput, yearNumber: null };
+    }
+
+    const tryParseYearToken = (token) => {
+      if (!/^\d{4}$/.test(token)) {
+        return null;
+      }
+
+      const parsedYear = Number.parseInt(token, 10);
+      return parsedYear >= 1900 && parsedYear <= 2100 ? parsedYear : null;
+    };
+
+    const trailingYear = tryParseYearToken(inputParts[inputParts.length - 1]);
+    if (trailingYear) {
+      return {
+        projectInput: inputParts.slice(0, -1).join(' ').trim(),
+        yearNumber: trailingYear,
+      };
+    }
+
+    const leadingYear = tryParseYearToken(inputParts[0]);
+    if (leadingYear) {
+      return {
+        projectInput: inputParts.slice(1).join(' ').trim(),
+        yearNumber: leadingYear,
+      };
+    }
+
+    return { projectInput: normalizedInput, yearNumber: null };
+  }
+
   normalizeProjectInput(value = '') {
     return String(value).trim().toLowerCase();
   }
@@ -698,8 +737,13 @@ class SlackCommandController {
       const isMonthlyReportCommand =
         parsed.commandName === 'report m' || parsed.commandName === 'report mt';
       const parsedMonthlyInput = isMonthlyReportCommand ? this.parseMonthlyReportInput(inputText) : null;
+      const parsedProjectCostInput = parsed.commandName === 'project cost'
+        ? this.parseProjectCostInput(inputText)
+        : null;
 
-      const projectInputCandidates = [projectInputForResolution];
+      const projectInputCandidates = [
+        parsedProjectCostInput?.projectInput || projectInputForResolution,
+      ];
       if (
         parsedMonthlyInput &&
         parsedMonthlyInput.projectInput &&
@@ -759,6 +803,12 @@ class SlackCommandController {
       }
 
       scriptArgument = resolvedProject.projectKey;
+
+      if (parsed.commandName === 'project cost') {
+        scriptArgument = parsedProjectCostInput?.yearNumber
+          ? [resolvedProject.projectKey, parsedProjectCostInput.yearNumber]
+          : resolvedProject.projectKey;
+      }
 
       if (parsed.commandName === 'report w') {
         scriptArgument = [resolvedProject.projectKey, 'week'];

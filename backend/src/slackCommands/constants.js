@@ -7,17 +7,17 @@ const commandMap = {
   'project info': {
     scriptCommand: 'get-project-info',
     requiresText: true,
-    usage: 'project info <project_key_or_name>',
+    usage: 'project info <project key or name>',
   },
   'project last week': {
     scriptCommand: 'project-last-week-hours',
     requiresText: true,
-    usage: 'project last week <project_key_or_name>',
+    usage: 'project last week <project key or name>',
   },
   'project cost': {
     scriptCommand: 'project-cost',
     requiresText: true,
-    usage: 'project cost <project_key_or_name>',
+    usage: 'project cost <project key or name> [year]',
   },
   'user cost': {
     customHandler: 'user-cost-setup',
@@ -31,7 +31,7 @@ const commandMap = {
   'project team': {
     scriptCommand: 'project-participants',
     requiresText: true,
-    usage: 'project team <project_key_or_name>',
+    usage: 'project team <project key or name>',
   },
   'report w': {
     scriptCommand: 'project-worklog-report',
@@ -150,7 +150,7 @@ const COMMAND_USAGE_TEXT = {
   help: 'help',
   'project info': 'project info <key_or_name>',
   'project last week': 'project last week <key_or_name>',
-  'project cost': 'project cost <key_or_name>',
+  'project cost': 'project cost <key_or_name> [year]',
   'report w': 'report w <project key or name>',
   'report m': 'report m <project key or name> [month]',
   'report wt': 'report wt <project key or name>',
@@ -172,7 +172,7 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   help: 'Shows all commands.',
   'project info': 'Shows project details.',
   'project last week': 'Shows hours from last week.',
-  'project cost': 'Shows total project cost.',
+  'project cost': 'Shows total project cost, optionally for a specific year.',
   'report w': 'Time per issue for the last week.',
   'report m': 'Time per issue for the last month.',
   'report wt': 'Team time per issue, week.',

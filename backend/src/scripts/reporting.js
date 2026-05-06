@@ -59,13 +59,14 @@ async function main() {
 
     if (command === 'project-cost') {
       const projectInput = process.argv[3];
+      const yearInput = process.argv[4] ? String(process.argv[4]).trim() : null;
 
       if (!projectInput) {
-        console.error('Missing project key or name. Usage: npm run report:project-cost <PROJECT_KEY_OR_NAME>');
+        console.error('Missing project key or name. Usage: npm run report:project-cost <PROJECT_KEY_OR_NAME> [YEAR]');
         process.exit(1);
       }
 
-      const report = await reportingService.getProjectCost(projectInput);
+      const report = await reportingService.getProjectCost(projectInput, yearInput ? { year: yearInput } : {});
 
       if (!report) {
         console.error(`No project found matching: ${projectInput}`);
@@ -229,7 +230,7 @@ async function main() {
     console.error('  project-worklog-report <PROJECT_KEY_OR_NAME> <week|month>');
     console.error('  project-worklog-team-report <PROJECT_KEY_OR_NAME> <week|month>');
     console.error('  project-participants <PROJECT_KEY_OR_NAME>');
-    console.error('  project-cost <PROJECT_KEY_OR_NAME>');
+    console.error('  project-cost <PROJECT_KEY_OR_NAME> [YEAR]');
     console.error('  list-projects');
     console.error('  workload-forecast [MONTHS]');
     console.error('  historical-comparison [MONTH] [YEAR] [YEARS_BACK]');

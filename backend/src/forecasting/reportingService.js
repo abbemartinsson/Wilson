@@ -23,8 +23,12 @@ async function getProjectInfo(projectKey) {
 	};
 }
 
-async function getProjectCost(projectKey) {
-	const report = await analyticsRepository.getProjectCostReport(projectKey);
+async function getProjectCost(projectKey, options = {}) {
+	const yearRange = getYearRangeInStockholm(options.year);
+	const report = await analyticsRepository.getProjectCostReport(projectKey, yearRange ? {
+		startDate: yearRange.startDateUtc,
+		endDate: yearRange.endDateUtc,
+	} : {});
 
 	if (!report) {
 		return null;
@@ -55,11 +59,39 @@ async function getProjectCost(projectKey) {
 			totalHours: roundToTwoDecimals(user.totalHours),
 		})),
 		missingCostCount: report.missingCostCount,
+		period: yearRange ? {
+			timeZone: 'Europe/Stockholm',
+			startDate: yearRange.startDate,
+			endDate: yearRange.endDate,
+			label: String(yearRange.year),
+		} : undefined,
 	};
 }
 
 function roundToTwoDecimals(value) {
 	return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function getYearRangeInStockholm(yearInput) {
+	if (yearInput === undefined || yearInput === null || String(yearInput).trim() === '') {
+		return null;
+	}
+
+	const year = Number.parseInt(yearInput, 10);
+	if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+		throw new Error(`Invalid year: ${yearInput}`);
+	}
+
+	const startParts = { year, month: 1, day: 1 };
+	const endParts = { year, month: 12, day: 31 };
+
+	return {
+		year,
+		startDate: `${year}-01-01`,
+		endDate: `${year}-12-31`,
+		startDateUtc: zonedTimeToUtc(startParts, 0, 0, 0, 'Europe/Stockholm'),
+		endDateUtc: zonedTimeToUtc(endParts, 23, 59, 59, 'Europe/Stockholm'),
+	};
 }
 
 async function searchProjects(query) {

@@ -582,12 +582,14 @@ async function getProjectParticipants(input) {
 	};
 }
 
-async function getProjectCostReport(input) {
+async function getProjectCostReport(input, options = {}) {
 	const normalizedInput = String(input || '').trim();
 
 	if (!normalizedInput) {
 		throw new Error('Project key or name is required');
 	}
+
+	const { startDate, endDate } = options;
 
 	const project = await findProjectByKeyOrName(normalizedInput);
 	if (!project) {
@@ -613,10 +615,20 @@ async function getProjectCostReport(input) {
 	const participantsMap = new Map();
 
 	for (const chunk of issueIdChunks) {
-		const { data, error } = await supabase
+		let query = supabase
 			.from(WORKLOGS_TABLE)
-			.select('user_id, time_spent_seconds')
+			.select('user_id, time_spent_seconds, started_at')
 			.in('issue_id', chunk);
+
+		if (startDate) {
+			query = query.gte('started_at', startDate.toISOString());
+		}
+
+		if (endDate) {
+			query = query.lte('started_at', endDate.toISOString());
+		}
+
+		const { data, error } = await query;
 
 		if (error) {
 			throw error;
