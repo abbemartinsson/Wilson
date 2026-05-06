@@ -713,6 +713,38 @@ class SlackCommandController {
       return true;
     }
 
+    if (config.customHandler === 'fortnox-login') {
+      if (!slackUserId) {
+        const messages = this.buildMultiMessagePayload(
+          'Fortnox login',
+          'I could not identify your Slack account.',
+          true
+        );
+        for (const message of messages) {
+          await this.postSlackMessage(client, channel, message, threadTs);
+        }
+        return true;
+      }
+
+      const appBaseUrl = String(process.env.APP_BASE_URL || '').replace(/\/$/, '');
+      if (!appBaseUrl) {
+        const messages = this.buildMultiMessagePayload(
+          'Fortnox login',
+          'APP_BASE_URL is not configured.',
+          true
+        );
+        for (const message of messages) {
+          await this.postSlackMessage(client, channel, message, threadTs);
+        }
+        return true;
+      }
+
+      const loginUrl = `${appBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
+      const body = `Open Fortnox login here: <${loginUrl}|Connect Fortnox>`;
+      await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
+      return true;
+    }
+
     const inputText = this.sanitizeInput(parsed.commandText);
     let scriptArgument = inputText || undefined;
     let projectInputForResolution = inputText;

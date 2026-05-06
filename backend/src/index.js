@@ -198,6 +198,14 @@ if (oauthHandler) {
   });
 }
 
+// Fortnox OAuth endpoints
+try {
+  const fortnoxAuth = require('./routes/fortnoxAuth');
+  app.use('/', fortnoxAuth);
+} catch (e) {
+  console.warn('Fortnox auth router not loaded:', e.message);
+}
+
 app.listen(port, () => {
   console.log(`Reporting API listening on port ${port}`);
   if (oauthHandler) {

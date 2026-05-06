@@ -96,6 +96,10 @@ const commandMap = {
     usage: 'lo siento',
     hidden: true,
   },
+  'fortnox login': {
+    customHandler: 'fortnox-login',
+    usage: 'fortnox login',
+  },
 };
 
 const ROLE_PERMISSION_CONFIG = {
@@ -105,6 +109,28 @@ const ROLE_PERMISSION_CONFIG = {
       'help',
       'project info',
       'project last week',
+      'projects',
+      'forecast',
+      'project team',
+      'history',
+      'full history',
+      'worklog',
+      'reminder setup',
+      'reminder update',
+      'reminder status',
+      'reminder hours',
+    ],
+  },
+  developer: {
+    commands: [
+      'help',
+      'fortnox login',
+      'project info',
+      'project last week',
+      'report w',
+      'report m',
+      'report wt',
+      'report mt',
       'projects',
       'forecast',
       'project team',
@@ -143,6 +169,7 @@ const ROLE_PERMISSION_CONFIG = {
 const ROLE_LABELS = {
   admin: 'Admin',
   member: 'Member',
+  developer: 'Developer',
   'project manager': 'Project manager',
 };
 
@@ -170,6 +197,7 @@ const COMMAND_USAGE_TEXT = {
 
 const COMMAND_SHORT_DESCRIPTIONS = {
   help: 'Shows all commands.',
+  'fortnox login': 'Starts the Fortnox authorization flow.',
   'project info': 'Shows project details.',
   'project last week': 'Shows hours from last week.',
   'project cost': 'Shows total project cost, optionally for a specific year.',
@@ -225,6 +253,11 @@ const HELP_COMMAND_GROUPS = [
     title: 'Admin',
     emoji: '🛠️',
     commands: ['project cost', 'user cost'],
+  },
+  {
+    title: 'Integrations',
+    emoji: '🔗',
+    commands: ['fortnox login'],
   },
 ];
 

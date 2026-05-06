@@ -40,11 +40,20 @@ Botten är endast tillgänglig för användare som finns i `USERS` och har en e-
 Standardroller i koden:
 - `admin` - alla kommandon
 - `member` - nästan alla kommandon `help`
+- `developer` - samma som `project manager`
+
+Developer kan också köra:
+
+```text
+fortnox login
+```
+
+Det kommandot skickar en Slack-länk till Fortnox-autentiseringen och öppnar flödet via `/auth/fortnox/start`.
 
 Om ingen roll finns, eller om rollen är okänd, används `member`.
 
 Lägg till kolumn i Supabase (SQL Editor):
-kolumn heter slack_role med enum value role: admin eller member
+kolumn heter `slack_role` med enum value role: `admin`, `member` eller `developer`
 
 Admin kan också sätta en users kostnad per timme med ett interaktivt kommando:
 
@@ -66,7 +75,7 @@ Exempel på uppdatering av roll för en användare:
 
 ```sql
 update "USERS"
-set slack_role = 'admin'
+set slack_role = 'developer'
 where slack_account_id = 'U0123456789';
 ```
 
