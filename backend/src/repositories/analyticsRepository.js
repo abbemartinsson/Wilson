@@ -614,6 +614,11 @@ async function getProjectCostReport(input, options = {}) {
 	const issueIdChunks = chunkArray(issueIds, 200);
 	const participantsMap = new Map();
 
+	// Prepare yearly accumulation (bucket by Europe/Stockholm year)
+	const yearsMap = new Map();
+	const yearUserSets = new Map();
+	const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit' });
+
 	for (const chunk of issueIdChunks) {
 		let query = supabase
 			.from(WORKLOGS_TABLE)
@@ -638,6 +643,27 @@ async function getProjectCostReport(input, options = {}) {
 		for (const row of rows) {
 			if (!row.user_id) {
 				continue;
+			}
+
+			// Yearly accumulation based on Stockholm local date
+			try {
+				const parts = dateFormatter.formatToParts(new Date(row.started_at));
+				let y = null;
+				for (const p of parts) {
+					if (p.type === 'year') {
+						y = Number.parseInt(p.value, 10);
+						break;
+					}
+				}
+				if (!y) {
+					y = new Date(row.started_at).getUTCFullYear();
+				}
+				yearsMap.set(y, (yearsMap.get(y) || 0) + (row.time_spent_seconds || 0));
+				const set = yearUserSets.get(y) || new Set();
+				if (row.user_id !== undefined && row.user_id !== null) set.add(row.user_id);
+				yearUserSets.set(y, set);
+			} catch (err) {
+				// ignore year grouping errors
 			}
 
 			if (!participantsMap.has(row.user_id)) {
@@ -720,6 +746,15 @@ async function getProjectCostReport(input, options = {}) {
 		return rightCost - leftCost;
 	});
 
+	// Build previous_years from yearsMap
+	const previous_years = Array.from(yearsMap.entries())
+		.sort((a, b) => b[0] - a[0])
+		.map(([year, totalSeconds]) => ({
+			year,
+			total_hours: Math.round((totalSeconds / 3600 + Number.EPSILON) * 100) / 100,
+			active_users: (yearUserSets.get(year) || new Set()).size,
+		}));
+
 	return {
 		projectId: project.id,
 		projectKey: project.jira_project_key,
@@ -731,6 +766,7 @@ async function getProjectCostReport(input, options = {}) {
 		totalParticipants: participants.length,
 		missingCostUsers,
 		missingCostCount: missingCostUsers.length,
+		previous_years,
 	};
 }
 
