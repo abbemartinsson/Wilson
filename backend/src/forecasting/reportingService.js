@@ -68,6 +68,58 @@ async function getProjectCost(projectKey, options = {}) {
 	};
 }
 
+// If no year filter was provided, enrich with yearly breakdown
+async function getProjectCostWithYears(projectKey, options = {}) {
+	const base = await getProjectCost(projectKey, options);
+	if (!base) return null;
+	const yearRange = getYearRangeInStockholm(options.year);
+	if (!yearRange) {
+		await attachYearlyBreakdownToProjectCost(base, projectKey);
+	}
+	return base;
+}
+
+// Add yearly breakdown computed from same worklogs so sums match
+async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
+	if (!reportObj || typeof reportObj !== 'object') return reportObj;
+
+	try {
+		const worklogs = await analyticsRepository.getAllWorklogsForForecast({ projectKey });
+		const yearsMap = new Map();
+		const userSets = new Map();
+
+		for (const wl of worklogs) {
+			if (!wl || !wl.started_at) continue;
+			const started = new Date(wl.started_at);
+			const parts = getDatePartsInTimeZone(started, 'Europe/Stockholm');
+			const year = parts.year;
+			const prev = yearsMap.get(year) || 0;
+			yearsMap.set(year, prev + (wl.time_spent_seconds || 0));
+
+			const set = userSets.get(year) || new Set();
+			if (wl.user_id !== undefined && wl.user_id !== null) {
+				set.add(wl.user_id);
+			}
+			userSets.set(year, set);
+		}
+
+		const previous_years = Array.from(yearsMap.entries())
+			.sort((a, b) => b[0] - a[0])
+			.map(([year, totalSeconds]) => ({
+				year,
+				total_hours: roundToTwoDecimals(totalSeconds / 3600),
+				active_users: (userSets.get(year) || new Set()).size,
+			}));
+
+		reportObj.previous_years = previous_years;
+	} catch (err) {
+		// non-fatal
+		console.warn('Failed to compute yearly breakdown for project cost:', err && err.message);
+	}
+
+	return reportObj;
+}
+
 function roundToTwoDecimals(value) {
 	return Math.round((value + Number.EPSILON) * 100) / 100;
 }
@@ -730,6 +782,7 @@ function getMonthRangeInStockholm(year, month) {
 module.exports = {
 	getProjectInfo,
 	getProjectCost,
+	getProjectCostWithYears,
 	searchProjects,
 	getAllProjects,
 	getProjectLastWeekHours,

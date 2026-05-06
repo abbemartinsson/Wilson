@@ -66,7 +66,9 @@ async function main() {
         process.exit(1);
       }
 
-      const report = await reportingService.getProjectCost(projectInput, yearInput ? { year: yearInput } : {});
+      const report = await reportingService.getProjectCostWithYears
+        ? await reportingService.getProjectCostWithYears(projectInput, yearInput ? { year: yearInput } : {})
+        : await reportingService.getProjectCost(projectInput, yearInput ? { year: yearInput } : {});
 
       if (!report) {
         console.error(`No project found matching: ${projectInput}`);

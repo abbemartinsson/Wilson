@@ -148,6 +148,10 @@ class OutputFormatter {
       this.formatDetailLine('Participants', this.formatNumber(report.participantCount ?? 0)),
     ];
 
+    if (report.period?.label) {
+      lines.splice(2, 0, this.formatDetailLine('Period', this.escapeMrkdwn(report.period.label)));
+    }
+
     if (report.missingCostCount > 0) {
       lines.push(this.formatDetailLine('Missing cost', this.formatNumber(report.missingCostCount)));
     }
@@ -180,6 +184,14 @@ class OutputFormatter {
     if (report.missingCostCount > 0) {
       lines.push('');
       lines.push('  Note: total cost is a minimum because some users are missing cost values.');
+    }
+
+    if (Array.isArray(report.previous_years) && report.previous_years.length > 0) {
+      lines.push('');
+      lines.push('  Yearly breakdown:');
+      for (const yearReport of report.previous_years) {
+        lines.push(`    - ${this.formatInlineCode(`${yearReport.year}: ${this.formatNumber(yearReport.total_hours ?? 0)} h, ${this.formatNumber(yearReport.active_users ?? 0)} contributors`)}`);
+      }
     }
 
     return lines.join('\n');
