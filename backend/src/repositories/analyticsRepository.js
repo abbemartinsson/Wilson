@@ -620,27 +620,35 @@ async function getProjectCostReport(input, options = {}) {
 	const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit' });
 
 	for (const chunk of issueIdChunks) {
-		let query = supabase
+		let baseQuery = supabase
 			.from(WORKLOGS_TABLE)
 			.select('user_id, time_spent_seconds, started_at')
 			.in('issue_id', chunk);
 
 		if (startDate) {
-			query = query.gte('started_at', startDate.toISOString());
+			baseQuery = baseQuery.gte('started_at', startDate.toISOString());
 		}
 
 		if (endDate) {
-			query = query.lte('started_at', endDate.toISOString());
+			baseQuery = baseQuery.lte('started_at', endDate.toISOString());
 		}
 
-		const { data, error } = await query;
+		// Fetch all rows for this chunk with pagination
+		const pageSize = 1000;
+		let from = 0;
+		let hasMore = true;
 
-		if (error) {
-			throw error;
-		}
+		while (hasMore) {
+			const to = from + pageSize - 1;
+			let query = baseQuery;
+			const { data, error } = await query.range(from, to);
 
-		const rows = data || [];
-		for (const row of rows) {
+			if (error) {
+				throw error;
+			}
+
+			const rows = data || [];
+			for (const row of rows) {
 			if (!row.user_id) {
 				continue;
 			}
@@ -675,6 +683,10 @@ async function getProjectCostReport(input, options = {}) {
 
 			const participant = participantsMap.get(row.user_id);
 			participant.totalSeconds += row.time_spent_seconds || 0;
+			}
+
+			hasMore = rows.length === pageSize;
+			from += pageSize;
 		}
 	}
 
