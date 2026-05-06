@@ -79,8 +79,8 @@ router.get('/auth/fortnox/start', async (req, res) => {
       state,
     });
 
-    const redirectUrl = `${FORTNOX_AUTH_URL}?${params.toString()}`;
-    return res.redirect(redirectUrl);
+    const fortnoxAuthUrl = `${FORTNOX_AUTH_URL}?${params.toString()}`;
+    return res.redirect(fortnoxAuthUrl);
   } catch (error) {
     console.error('Fortnox start error:', error);
     return res.status(500).json({ error: 'Failed to start Fortnox OAuth flow' });
