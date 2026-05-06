@@ -235,6 +235,23 @@ class SlackCommandController {
     await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
   }
 
+  getFortnoxStartUrl(slackUserId) {
+    const appBaseUrl = String(process.env.APP_BASE_URL || '').trim().replace(/\/$/, '');
+    if (appBaseUrl) {
+      return `${appBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
+    }
+
+    const redirectUrl = String(process.env.FORTNOX_REDIRECT_URL || '').trim();
+    if (redirectUrl) {
+      const inferredBaseUrl = redirectUrl.replace(/\/auth\/fortnox\/callback\/?$/, '').replace(/\/auth\/fortnox\/start\/?$/, '');
+      if (inferredBaseUrl) {
+        return `${inferredBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
+      }
+    }
+
+    return null;
+  }
+
   async uploadPDFFile(client, channel, pdfStream, filename, title, threadTs) {
     try {
       const response = await client.files.uploadV2({
@@ -715,31 +732,26 @@ class SlackCommandController {
 
     if (config.customHandler === 'fortnox-login') {
       if (!slackUserId) {
-        const messages = this.buildMultiMessagePayload(
-          'Fortnox login',
-          'I could not identify your Slack account.',
-          true
+        await this.postSlackMessage(
+          client,
+          channel,
+          this.buildPlainMessagePayload('I could not identify your Slack account.'),
+          threadTs
         );
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
-        }
         return true;
       }
 
-      const appBaseUrl = String(process.env.APP_BASE_URL || '').replace(/\/$/, '');
-      if (!appBaseUrl) {
-        const messages = this.buildMultiMessagePayload(
-          'Fortnox login',
-          'APP_BASE_URL is not configured.',
-          true
+      const loginUrl = this.getFortnoxStartUrl(slackUserId);
+      if (!loginUrl) {
+        await this.postSlackMessage(
+          client,
+          channel,
+          this.buildPlainMessagePayload('APP_BASE_URL or FORTNOX_REDIRECT_URL is not configured.'),
+          threadTs
         );
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
-        }
         return true;
       }
 
-      const loginUrl = `${appBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
       const body = `Open Fortnox login here: <${loginUrl}|Connect Fortnox>`;
       await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
       return true;
