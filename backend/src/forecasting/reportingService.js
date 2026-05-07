@@ -99,6 +99,8 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 		));
 
 		const previous_years = [];
+		let yearlySecondsTotal = 0;
+		let yearlyCostTotal = 0;
 		for (const year of years.sort((a, b) => b - a)) {
 			const yearRange = getYearRangeInStockholm(year);
 			const yearlyReport = await analyticsRepository.getProjectCostReport(projectKey, {
@@ -115,6 +117,20 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 				total_hours: roundToTwoDecimals(yearlyReport.totalSeconds / 3600),
 				total_cost: roundToTwoDecimals(yearlyReport.totalCost),
 				active_users: yearlyReport.totalParticipants,
+			});
+
+			yearlySecondsTotal += yearlyReport.totalSeconds || 0;
+			yearlyCostTotal += yearlyReport.totalCost || 0;
+		}
+
+		const remainingSeconds = Math.max(0, (reportObj.totalSeconds || 0) - yearlySecondsTotal);
+		const remainingCost = Math.max(0, (reportObj.totalCost || 0) - yearlyCostTotal);
+		if (remainingSeconds > 0.5) {
+			previous_years.push({
+				year: 'Utan datum',
+				total_hours: roundToTwoDecimals(remainingSeconds / 3600),
+				total_cost: roundToTwoDecimals(remainingCost),
+				active_users: 0,
 			});
 		}
 
