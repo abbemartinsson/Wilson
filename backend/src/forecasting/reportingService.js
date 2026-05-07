@@ -92,85 +92,31 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 
 	try {
 		const worklogs = await analyticsRepository.getAllWorklogsForForecast({ projectKey });
-		const yearsMap = new Map();
-		const userSets = new Map();
-		const yearlyUserHoursMap = new Map(); // Track hours per user per year
-		const allUserIds = new Set();
+		const years = Array.from(new Set(
+			worklogs
+				.filter((worklog) => worklog && worklog.started_at && worklog.user_id !== undefined && worklog.user_id !== null)
+				.map((worklog) => getDatePartsInTimeZone(new Date(worklog.started_at), 'Europe/Stockholm').year)
+		));
 
-		for (const wl of worklogs) {
-			if (!wl || !wl.started_at) continue;
-			if (!wl.user_id) continue; // match getProjectCostReport: ignore worklogs without user_id
-			const started = new Date(wl.started_at);
-			const parts = getDatePartsInTimeZone(started, 'Europe/Stockholm');
-			const year = parts.year;
-			const prev = yearsMap.get(year) || 0;
-			yearsMap.set(year, prev + (wl.time_spent_seconds || 0));
-
-			const set = userSets.get(year) || new Set();
-			if (wl.user_id !== undefined && wl.user_id !== null) {
-				set.add(wl.user_id);
-				allUserIds.add(wl.user_id);
-			}
-			userSets.set(year, set);
-
-			// Track hours per user per year
-			const yearKey = `${year}`;
-			const userYearKey = `${wl.user_id}`;
-			if (!yearlyUserHoursMap.has(yearKey)) {
-				yearlyUserHoursMap.set(yearKey, new Map());
-			}
-			const userHoursInYear = yearlyUserHoursMap.get(yearKey);
-			userHoursInYear.set(userYearKey, (userHoursInYear.get(userYearKey) || 0) + (wl.time_spent_seconds || 0));
-		}
-
-		// Get user cost details from participants (already fetched and have costPerHour)
-		// Convert user IDs to strings for consistent lookup
-		const userDetailsMap = new Map();
-		for (const participant of reportObj.participants || []) {
-			userDetailsMap.set(String(participant.userId), participant);
-		}
-
-		// If any users are missing from participants, try to get them from the full participants list
-		// This ensures we have cost data for all users across all years
-		if (userDetailsMap.size < allUserIds.size) {
-			// Get all users from the full cost report to ensure we have their costs
-			const fullReport = await analyticsRepository.getProjectCostReport(projectKey, {});
-			if (fullReport && fullReport.participants) {
-				for (const participant of fullReport.participants) {
-					const userKey = String(participant.userId);
-					if (!userDetailsMap.has(userKey)) {
-						userDetailsMap.set(userKey, participant);
-					}
-				}
-			}
-		}
-
-		const previous_years = Array.from(yearsMap.entries())
-			.sort((a, b) => b[0] - a[0])
-			.map(([year, totalSeconds]) => {
-				const yearKey = `${year}`;
-				const userHoursInYear = yearlyUserHoursMap.get(yearKey) || new Map();
-				let yearCost = 0;
-
-				// Calculate cost for this year based on user hours and their cost per hour
-				for (const [userIdStr, secondsWorked] of userHoursInYear.entries()) {
-					const userId = userIdStr;
-					const hoursWorked = secondsWorked / 3600;
-					const userDetails = userDetailsMap.get(userId);
-					const costPerHour = userDetails?.costPerHour;
-
-					if (Number.isFinite(costPerHour)) {
-						yearCost += hoursWorked * costPerHour;
-					}
-				}
-
-				return {
-					year,
-					total_hours: roundToTwoDecimals(totalSeconds / 3600),
-					total_cost: roundToTwoDecimals(yearCost),
-					active_users: (userSets.get(year) || new Set()).size,
-				};
+		const previous_years = [];
+		for (const year of years.sort((a, b) => b - a)) {
+			const yearRange = getYearRangeInStockholm(year);
+			const yearlyReport = await analyticsRepository.getProjectCostReport(projectKey, {
+				startDate: yearRange.startDateUtc,
+				endDate: yearRange.endDateUtc,
 			});
+
+			if (!yearlyReport) {
+				continue;
+			}
+
+			previous_years.push({
+				year,
+				total_hours: roundToTwoDecimals(yearlyReport.totalSeconds / 3600),
+				total_cost: roundToTwoDecimals(yearlyReport.totalCost),
+				active_users: yearlyReport.totalParticipants,
+			});
+		}
 
 		reportObj.previous_years = previous_years;
 	} catch (err) {
