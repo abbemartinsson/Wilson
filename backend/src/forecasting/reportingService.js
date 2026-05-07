@@ -124,9 +124,10 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 		}
 
 		// Get user cost details from participants (already fetched and have costPerHour)
+		// Convert user IDs to strings for consistent lookup
 		const userDetailsMap = new Map();
 		for (const participant of reportObj.participants || []) {
-			userDetailsMap.set(participant.userId, participant);
+			userDetailsMap.set(String(participant.userId), participant);
 		}
 
 		// If any users are missing from participants, try to get them from the full participants list
@@ -136,8 +137,9 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 			const fullReport = await analyticsRepository.getProjectCostReport(projectKey, {});
 			if (fullReport && fullReport.participants) {
 				for (const participant of fullReport.participants) {
-					if (!userDetailsMap.has(participant.userId)) {
-						userDetailsMap.set(participant.userId, participant);
+					const userKey = String(participant.userId);
+					if (!userDetailsMap.has(userKey)) {
+						userDetailsMap.set(userKey, participant);
 					}
 				}
 			}
