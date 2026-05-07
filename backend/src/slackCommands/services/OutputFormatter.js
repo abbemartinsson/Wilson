@@ -190,7 +190,10 @@ class OutputFormatter {
       lines.push('');
       lines.push('  Yearly breakdown:');
       for (const yearReport of report.previous_years) {
-        lines.push(`    - ${this.formatInlineCode(`${yearReport.year}: ${this.formatNumber(yearReport.total_hours ?? 0)} h, ${this.formatNumber(yearReport.active_users ?? 0)} contributors`)}`);
+        const costStr = yearReport.total_cost !== undefined && yearReport.total_cost !== null 
+          ? `, ${this.formatNumber(yearReport.total_cost ?? 0)} kr` 
+          : '';
+        lines.push(`    - ${this.formatInlineCode(`${yearReport.year}: ${this.formatNumber(yearReport.total_hours ?? 0)} h${costStr}, ${this.formatNumber(yearReport.active_users ?? 0)} contributors`)}`);
       }
     }
 

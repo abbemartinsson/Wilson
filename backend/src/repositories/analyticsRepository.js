@@ -617,6 +617,7 @@ async function getProjectCostReport(input, options = {}) {
 	// Prepare yearly accumulation (bucket by Europe/Stockholm year)
 	const yearsMap = new Map();
 	const yearUserSets = new Map();
+	const yearlyUserHoursMap = new Map(); // Track hours per user per year
 	const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit' });
 
 	for (const chunk of issueIdChunks) {
@@ -670,6 +671,15 @@ async function getProjectCostReport(input, options = {}) {
 				const set = yearUserSets.get(y) || new Set();
 				if (row.user_id !== undefined && row.user_id !== null) set.add(row.user_id);
 				yearUserSets.set(y, set);
+				
+				// Track hours per user per year
+				const yearKey = `${y}`;
+				const userYearKey = `${row.user_id}`;
+				if (!yearlyUserHoursMap.has(yearKey)) {
+					yearlyUserHoursMap.set(yearKey, new Map());
+				}
+				const userHoursInYear = yearlyUserHoursMap.get(yearKey);
+				userHoursInYear.set(userYearKey, (userHoursInYear.get(userYearKey) || 0) + (row.time_spent_seconds || 0));
 			} catch (err) {
 				// ignore year grouping errors
 			}
@@ -758,14 +768,33 @@ async function getProjectCostReport(input, options = {}) {
 		return rightCost - leftCost;
 	});
 
-	// Build previous_years from yearsMap
+	// Build previous_years from yearsMap with costs
 	const previous_years = Array.from(yearsMap.entries())
 		.sort((a, b) => b[0] - a[0])
-		.map(([year, totalSeconds]) => ({
-			year,
-			total_hours: Math.round((totalSeconds / 3600 + Number.EPSILON) * 100) / 100,
-			active_users: (yearUserSets.get(year) || new Set()).size,
-		}));
+		.map(([year, totalSeconds]) => {
+			const yearKey = `${year}`;
+			const userHoursInYear = yearlyUserHoursMap.get(yearKey) || new Map();
+			let yearCost = 0;
+			
+			// Calculate cost for this year based on user hours and their cost per hour
+			for (const [userIdStr, secondsWorked] of userHoursInYear.entries()) {
+				const userId = userIdStr;
+				const hoursWorked = secondsWorked / 3600;
+				const userDetails = userDetailsMap.get(userId);
+				const costPerHour = userDetails?.cost ? Number(userDetails.cost) : null;
+				
+				if (Number.isFinite(costPerHour)) {
+					yearCost += hoursWorked * costPerHour;
+				}
+			}
+			
+			return {
+				year,
+				total_hours: Math.round((totalSeconds / 3600 + Number.EPSILON) * 100) / 100,
+				total_cost: roundToTwoDecimals(yearCost),
+				active_users: (yearUserSets.get(year) || new Set()).size,
+			};
+		});
 
 	return {
 		projectId: project.id,

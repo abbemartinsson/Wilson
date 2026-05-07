@@ -34,7 +34,7 @@ async function getProjectCost(projectKey, options = {}) {
 		return null;
 	}
 
-	return {
+	const result = {
 		projectId: report.projectId,
 		projectKey: report.projectKey,
 		projectName: report.projectName,
@@ -66,6 +66,13 @@ async function getProjectCost(projectKey, options = {}) {
 			label: String(yearRange.year),
 		} : undefined,
 	};
+
+	// If no year filter, include the previous_years from the report which already has costs
+	if (!yearRange && report.previous_years) {
+		result.previous_years = report.previous_years;
+	}
+
+	return result;
 }
 
 // If no year filter was provided, enrich with yearly breakdown
