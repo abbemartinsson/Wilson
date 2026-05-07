@@ -95,6 +95,7 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 		const yearsMap = new Map();
 		const userSets = new Map();
 		const yearlyUserHoursMap = new Map(); // Track hours per user per year
+		const allUserIds = new Set();
 
 		for (const wl of worklogs) {
 			if (!wl || !wl.started_at) continue;
@@ -108,6 +109,7 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 			const set = userSets.get(year) || new Set();
 			if (wl.user_id !== undefined && wl.user_id !== null) {
 				set.add(wl.user_id);
+				allUserIds.add(wl.user_id);
 			}
 			userSets.set(year, set);
 
@@ -121,11 +123,24 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 			userHoursInYear.set(userYearKey, (userHoursInYear.get(userYearKey) || 0) + (wl.time_spent_seconds || 0));
 		}
 
-		// Get user details for cost calculations
-		const userIds = Array.from(reportObj.participants || []).map(p => p.userId);
+		// Get user cost details from participants (already fetched and have costPerHour)
 		const userDetailsMap = new Map();
 		for (const participant of reportObj.participants || []) {
 			userDetailsMap.set(participant.userId, participant);
+		}
+
+		// If any users are missing from participants, try to get them from the full participants list
+		// This ensures we have cost data for all users across all years
+		if (userDetailsMap.size < allUserIds.size) {
+			// Get all users from the full cost report to ensure we have their costs
+			const fullReport = await analyticsRepository.getProjectCostReport(projectKey, {});
+			if (fullReport && fullReport.participants) {
+				for (const participant of fullReport.participants) {
+					if (!userDetailsMap.has(participant.userId)) {
+						userDetailsMap.set(participant.userId, participant);
+					}
+				}
+			}
 		}
 
 		const previous_years = Array.from(yearsMap.entries())
