@@ -94,6 +94,7 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 		const worklogs = await analyticsRepository.getAllWorklogsForForecast({ projectKey });
 		const yearsMap = new Map();
 		const userSets = new Map();
+		const yearlyUserHoursMap = new Map(); // Track hours per user per year
 
 		for (const wl of worklogs) {
 			if (!wl || !wl.started_at) continue;
@@ -109,15 +110,50 @@ async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
 				set.add(wl.user_id);
 			}
 			userSets.set(year, set);
+
+			// Track hours per user per year
+			const yearKey = `${year}`;
+			const userYearKey = `${wl.user_id}`;
+			if (!yearlyUserHoursMap.has(yearKey)) {
+				yearlyUserHoursMap.set(yearKey, new Map());
+			}
+			const userHoursInYear = yearlyUserHoursMap.get(yearKey);
+			userHoursInYear.set(userYearKey, (userHoursInYear.get(userYearKey) || 0) + (wl.time_spent_seconds || 0));
+		}
+
+		// Get user details for cost calculations
+		const userIds = Array.from(reportObj.participants || []).map(p => p.userId);
+		const userDetailsMap = new Map();
+		for (const participant of reportObj.participants || []) {
+			userDetailsMap.set(participant.userId, participant);
 		}
 
 		const previous_years = Array.from(yearsMap.entries())
 			.sort((a, b) => b[0] - a[0])
-			.map(([year, totalSeconds]) => ({
-				year,
-				total_hours: roundToTwoDecimals(totalSeconds / 3600),
-				active_users: (userSets.get(year) || new Set()).size,
-			}));
+			.map(([year, totalSeconds]) => {
+				const yearKey = `${year}`;
+				const userHoursInYear = yearlyUserHoursMap.get(yearKey) || new Map();
+				let yearCost = 0;
+
+				// Calculate cost for this year based on user hours and their cost per hour
+				for (const [userIdStr, secondsWorked] of userHoursInYear.entries()) {
+					const userId = userIdStr;
+					const hoursWorked = secondsWorked / 3600;
+					const userDetails = userDetailsMap.get(userId);
+					const costPerHour = userDetails?.costPerHour;
+
+					if (Number.isFinite(costPerHour)) {
+						yearCost += hoursWorked * costPerHour;
+					}
+				}
+
+				return {
+					year,
+					total_hours: roundToTwoDecimals(totalSeconds / 3600),
+					total_cost: roundToTwoDecimals(yearCost),
+					active_users: (userSets.get(year) || new Set()).size,
+				};
+			});
 
 		reportObj.previous_years = previous_years;
 	} catch (err) {
