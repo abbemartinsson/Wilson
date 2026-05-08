@@ -8,7 +8,9 @@ class ChartGeneratorService {
             width: this.width,
             height: this.height,
             chartCallback: (ChartJS) => {
-                // Enable plugins if needed
+                // Ensure text renders with broadly available glyph coverage in server environments.
+                ChartJS.defaults.font.family = 'DejaVu Sans, Noto Sans, Arial, sans-serif';
+                ChartJS.defaults.color = '#111111';
             },
         });
     }
