@@ -24,6 +24,11 @@ const commandMap = {
     requiresText: true,
     usage: 'user cost <first_name>',
   },
+  'user cost all': {
+    customHandler: 'user-cost-list',
+    requiresText: false,
+    usage: 'user cost all',
+  },
   worklog: {
     customHandler: 'worklog-setup',
     usage: 'worklog',
@@ -186,6 +191,7 @@ const COMMAND_USAGE_TEXT = {
   'report wt': 'report wt <project key or name>',
   'report mt': 'report mt <project key or name> [month]',
   'user cost': 'user cost <first_name>',
+  'user cost all': 'user cost all',
   worklog: 'worklog',
   'project team': 'project team <key_or_name>',
   projects: 'projects',
@@ -209,6 +215,7 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   'report wt': 'Team time per issue, week.',
   'report mt': 'Team time per issue, month.',
   'user cost': 'Sets a user hourly cost.',
+  'user cost all': 'Lists all users with email and their cost status.',
   worklog: 'Logs time on one of your issues.',
   'project team': 'Shows project contributors.',
   projects: 'Lists all active projects.',
@@ -255,7 +262,7 @@ const HELP_COMMAND_GROUPS = [
   {
     title: 'Admin',
     emoji: '🛠️',
-    commands: ['project cost', 'user cost'],
+    commands: ['project cost', 'user cost', 'user cost all'],
   },
   {
     title: 'Integrations',

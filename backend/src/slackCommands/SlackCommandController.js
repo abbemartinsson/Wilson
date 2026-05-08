@@ -223,6 +223,54 @@ class SlackCommandController {
     return messages;
   }
 
+  buildUserCostListMessage(users) {
+    const userList = Array.isArray(users) ? users : [];
+
+    if (userList.length === 0) {
+      return '• 👤 Users with email\n  No users with email found.';
+    }
+
+    const usersWithCost = [];
+    const usersWithoutCost = [];
+
+    for (const user of userList) {
+      const name = this.formatter.escapeMrkdwn(user.name || 'Unknown user');
+      const email = this.formatter.escapeMrkdwn(user.email || 'Unknown email');
+      const hasCost = user.cost !== null && user.cost !== undefined && String(user.cost).trim() !== '';
+
+      const costText = hasCost ? this.formatter.formatCurrency(user.cost) : 'no cost set';
+      const entry = `  - ${this.formatter.formatInlineCode(`${name} (${email}) - ${costText}`)}`;
+
+      if (hasCost) {
+        usersWithCost.push(entry);
+      } else {
+        usersWithoutCost.push(entry);
+      }
+    }
+
+    const lines = [`• 👤 Users with email (${userList.length} total)`, ''];
+
+    lines.push(`  Users with cost (${usersWithCost.length}):`);
+    if (usersWithCost.length > 0) {
+      lines.push(...usersWithCost);
+    } else {
+      lines.push('  - None');
+    }
+
+    lines.push('');
+    lines.push(`  Users without cost (${usersWithoutCost.length}):`);
+    if (usersWithoutCost.length > 0) {
+      lines.push(...usersWithoutCost);
+    } else {
+      lines.push('  - None');
+    }
+
+    lines.push('');
+    lines.push(`  Summary: ${usersWithCost.length} with cost, ${usersWithoutCost.length} without cost`);
+
+    return lines.join('\n');
+  }
+
   async postSlackMessage(client, channel, payload, threadTs) {
     return client.chat.postMessage({
       channel,
@@ -700,6 +748,18 @@ class SlackCommandController {
         slackUserId,
         sanitizeInput: this.sanitizeInput.bind(this),
       });
+    }
+
+    if (config.customHandler === 'user-cost-list') {
+      const users = await userRepository.listUsersWithEmailAndCost();
+      const body = this.buildUserCostListMessage(users);
+      const messages = this.buildSplitPlainMessages(body, { maxLinesPerMessage: 10 });
+
+      for (const message of messages) {
+        await this.postSlackMessage(client, channel, message, threadTs);
+      }
+
+      return true;
     }
 
     if (config.customHandler === 'worklog-setup') {

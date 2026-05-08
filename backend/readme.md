@@ -61,6 +61,12 @@ Admin kan också sätta en users kostnad per timme med ett interaktivt kommando:
 user cost <förnamn>
 ```
 
+Admin kan också lista alla users med email och se vilka som har kostnad satt med:
+
+```text
+user cost all
+```
+
 Om flera users har samma förnamn listar boten alla träffar och du får välja rätt person innan du anger beloppet i kr/timme.
 
 Du kan också logga tid på ett av dina assignade issues med:
