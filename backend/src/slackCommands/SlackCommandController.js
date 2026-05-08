@@ -907,12 +907,18 @@ class SlackCommandController {
       }
 
       if (!resolvedProject) {
-        // Special-case: allow 'all' (or Swedish 'alla') to mean all projects
-        const normalizedCandidate = String(projectInputForResolution || '').trim().toLowerCase();
-        if (normalizedCandidate === 'all' || normalizedCandidate === 'alla' || normalizedCandidate === 'all projects' || normalizedCandidate === 'alla projekt') {
-          // pass through 'all' as script argument and skip resolution
-          scriptArgument = parsedProjectCostInput?.yearNumber ? ['all', parsedProjectCostInput.yearNumber] : 'all';
-        } else {
+          // Special-case: allow '*' (or 'all' as fallback) to mean all projects
+          const normalizedCandidate = String(projectInputForResolution || '').trim().toLowerCase();
+          if (
+            normalizedCandidate === '*' ||
+            normalizedCandidate === 'all' ||
+            normalizedCandidate === 'alla' ||
+            normalizedCandidate === 'all projects' ||
+            normalizedCandidate === 'alla projekt'
+          ) {
+            // pass through '*' as script argument and skip resolution
+            scriptArgument = parsedProjectCostInput?.yearNumber ? ['*', parsedProjectCostInput.yearNumber] : '*';
+          } else {
         if (firstMultipleMatch) {
           const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
           const messages = this.buildMultiMessagePayload(
