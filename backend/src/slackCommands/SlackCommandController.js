@@ -751,7 +751,15 @@ class SlackCommandController {
         text: this.sanitizeInput(text),
       });
 
-      const messages = this.buildMultiMessagePayload('Unknown command', roleAwareHelpMessage, true);
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload('❌ Unknown command. Here are the available commands:'),
+        threadTs
+      );
+
+      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
+      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
       }
@@ -766,11 +774,15 @@ class SlackCommandController {
         userRole,
       });
 
-      const messages = this.buildMultiMessagePayload(
-        'Access denied',
-        `You do not have permission for ${this.commandPrefix}${parsed.commandName}.\n\n${roleAwareHelpMessage}`,
-        false
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload(`🔒 You do not have permission for \`${this.commandPrefix}${parsed.commandName}\`. Here are your available commands:`),
+        threadTs
       );
+
+      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
+      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
       }
@@ -907,7 +919,15 @@ class SlackCommandController {
     let projectInputForResolution = inputText;
 
     if (config.requiresText && !inputText) {
-      const messages = this.buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${roleAwareHelpMessage}`, true);
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload(`ℹ️ Missing required input.\nUsage: \`${config.usage}\``),
+        threadTs
+      );
+
+      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
+      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
       }

@@ -210,9 +210,9 @@ class OutputFormatter {
     let totalCost = 0;
     let totalParticipants = 0;
 
-    // Summary line
+    // Header line
     const period = reports[0]?.period?.label || 'Unknown period';
-    lines.push(`📊 *All Projects - ${this.escapeMrkdwn(period)}*`);
+    lines.push(`• 📊 *All Projects* (${this.escapeMrkdwn(period)})`);
     lines.push('');
 
     // Individual projects
@@ -223,7 +223,7 @@ class OutputFormatter {
       const cost = this.formatCurrency(report.totalCost ?? 0);
       const participants = this.formatNumber(report.participantCount ?? 0);
 
-      lines.push(`• ${projectName} (${projectKey}): ${hours} h, ${cost}, ${participants} contributors`);
+      lines.push(this.formatDetailLine(`${projectName} (${projectKey})`, `${hours} h, ${cost}, ${participants} contributors`));
 
       totalHours += report.totalHours ?? 0;
       totalCost += report.totalCost ?? 0;
@@ -232,11 +232,11 @@ class OutputFormatter {
 
     // Summary section
     lines.push('');
-    lines.push('*Summary:*');
-    lines.push(`• Total Hours: ${this.formatNumber(totalHours)} h`);
-    lines.push(`• Total Cost: ${this.formatCurrency(totalCost)}`);
-    lines.push(`• Total Participants: ${this.formatNumber(totalParticipants)}`);
-    lines.push(`• Projects: ${this.formatNumber(reports.length)}`);
+    lines.push('  *Summary:*');
+    lines.push(this.formatDetailLine('Total Hours', `${this.formatNumber(totalHours)} h`));
+    lines.push(this.formatDetailLine('Total Cost', this.formatCurrency(totalCost)));
+    lines.push(this.formatDetailLine('Total Participants', this.formatNumber(totalParticipants)));
+    lines.push(this.formatDetailLine('Projects', this.formatNumber(reports.length)));
 
     return lines.join('\n');
   }
