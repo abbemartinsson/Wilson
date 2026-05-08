@@ -200,12 +200,14 @@ class ChartGeneratorService {
             options: {
                 responsive: false,
                 maintainAspectRatio: false,
+                backgroundColor: '#ffffff',
                 plugins: {
                     legend: { display: false },
                     title: {
                         display: true,
                         text: 'Forecast',
                         font: { size: 14 },
+                        color: '#111111',
                     },
                 },
                 scales: {
@@ -214,20 +216,37 @@ class ChartGeneratorService {
                             maxRotation: 45,
                             minRotation: 45,
                             font: { size: 10 },
+                            color: '#111111',
                         },
                         grid: { display: false },
+                        title: { display: true, text: 'Month', color: '#111111' },
                     },
                     y: {
                         min: yAxisMin,
                         max: yAxisMax,
                         grid: { color: 'rgba(0,0,0,0.06)' },
-                        title: { display: true, text: 'Hours' },
+                        ticks: { color: '#111111' },
+                        title: { display: true, text: 'Hours', color: '#111111' },
                     },
                 },
             },
         };
 
-        return this.chartJSNodeCanvas.renderToBuffer(configuration, 'image/png');
+        return this.chartJSNodeCanvas.renderToBuffer({
+            ...configuration,
+            plugins: [
+                {
+                    id: 'whiteBackground',
+                    beforeDraw: (chart) => {
+                        const { ctx, width, height } = chart;
+                        ctx.save();
+                        ctx.fillStyle = '#ffffff';
+                        ctx.fillRect(0, 0, width, height);
+                        ctx.restore();
+                    },
+                },
+            ],
+        }, 'image/png');
     }
 
     /**
