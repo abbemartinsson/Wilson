@@ -223,6 +223,43 @@ class SlackCommandController {
     return messages;
   }
 
+  buildHelpMessagesWithGrouping(sections, maxLinesPerMessage = 8) {
+    if (!Array.isArray(sections) || sections.length === 0) {
+      return [this.buildPlainMessagePayload('No commands available.')];
+    }
+
+    const messages = [];
+    let currentMessageLines = [];
+    let currentLineCount = 0;
+
+    for (const section of sections) {
+      const sectionLineCount = section.lines.length;
+      const totalLinesIfAdded = currentLineCount + sectionLineCount + (currentLineCount > 0 ? 1 : 0); // +1 for spacing
+
+      // If adding this section would exceed maxLines and we have content, start new message
+      if (totalLinesIfAdded > maxLinesPerMessage && currentMessageLines.length > 0) {
+        messages.push(this.buildPlainMessagePayload(currentMessageLines.join('\n')));
+        currentMessageLines = [];
+        currentLineCount = 0;
+      }
+
+      // Add spacing between sections (but not before header or after previous spacing)
+      if (currentMessageLines.length > 0 && !currentMessageLines[currentMessageLines.length - 1].endsWith('')) {
+        currentMessageLines.push('');
+        currentLineCount += 1;
+      }
+
+      currentMessageLines.push(...section.lines);
+      currentLineCount += sectionLineCount;
+    }
+
+    if (currentMessageLines.length > 0) {
+      messages.push(this.buildPlainMessagePayload(currentMessageLines.join('\n')));
+    }
+
+    return messages.length > 0 ? messages : [this.buildPlainMessagePayload('No commands available.')];
+  }
+
   buildUserCostListMessage(users) {
     const userList = Array.isArray(users) ? users : [];
 
@@ -743,7 +780,8 @@ class SlackCommandController {
     if (parsed.commandName === 'help') {
       logger.info('Showing help for text command', { command: parsed.commandName });
 
-      const messages = this.buildSplitPlainMessages(roleAwareHelpMessage, { maxLinesPerMessage: 4 });
+      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
+      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
 
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);

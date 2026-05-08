@@ -139,6 +139,53 @@ class RoleAccessService {
 
     return helpLines.join('\n');
   }
+
+  buildHelpSectionsByRole(role) {
+    const normalizedRole = this.normalizeUserRole(role);
+    const roleLabel = this.roleLabels[normalizedRole] || normalizedRole;
+    const allowedCommands = this.getAllowedCommandsForRole(normalizedRole);
+    // Filter out hidden commands from help
+    const visibleAllowedCommands = allowedCommands.filter(
+      (commandName) => !this.commandMap[commandName]?.hidden
+    );
+    const allowedSet = new Set(visibleAllowedCommands);
+    const usedCommandNames = new Set();
+    const sections = [{ isHeader: true, lines: [`📚 Available commands for role: *${roleLabel}*`, ''] }];
+
+    for (const group of this.helpCommandGroups) {
+      const visibleCommands = group.commands.filter((commandName) => allowedSet.has(commandName));
+      if (visibleCommands.length === 0) {
+        continue;
+      }
+
+      visibleCommands.forEach((commandName) => usedCommandNames.add(commandName));
+
+      const groupLines = [`• ${group.emoji} *${group.title}:*`];
+      for (const commandName of visibleCommands) {
+        const usage = this.commandUsageText[commandName] || this.commandMap[commandName]?.usage || commandName;
+        const shortDescription = this.commandShortDescriptions[commandName] || 'No description available.';
+        groupLines.push(`   - \`${usage}\` - ${shortDescription}`);
+      }
+
+      sections.push({ isHeader: false, lines: groupLines });
+    }
+
+    const ungroupedCommands = visibleAllowedCommands.filter(
+      (commandName) => commandName !== 'help' && !usedCommandNames.has(commandName)
+    );
+
+    if (ungroupedCommands.length > 0) {
+      const otherLines = ['• 🧩 *Other:*'];
+      for (const commandName of ungroupedCommands) {
+        const usage = this.commandUsageText[commandName] || this.commandMap[commandName]?.usage || commandName;
+        const shortDescription = this.commandShortDescriptions[commandName] || 'No description available.';
+        otherLines.push(`   - \`${usage}\` - ${shortDescription}`);
+      }
+      sections.push({ isHeader: false, lines: otherLines });
+    }
+
+    return sections;
+  }
 }
 
 module.exports = RoleAccessService;
