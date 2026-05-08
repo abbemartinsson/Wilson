@@ -907,6 +907,12 @@ class SlackCommandController {
       }
 
       if (!resolvedProject) {
+        // Special-case: allow 'all' (or Swedish 'alla') to mean all projects
+        const normalizedCandidate = String(projectInputForResolution || '').trim().toLowerCase();
+        if (normalizedCandidate === 'all' || normalizedCandidate === 'alla' || normalizedCandidate === 'all projects' || normalizedCandidate === 'alla projekt') {
+          // pass through 'all' as script argument and skip resolution
+          scriptArgument = parsedProjectCostInput?.yearNumber ? ['all', parsedProjectCostInput.yearNumber] : 'all';
+        } else {
         if (firstMultipleMatch) {
           const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
           const messages = this.buildMultiMessagePayload(
@@ -920,18 +926,12 @@ class SlackCommandController {
           return true;
         }
 
-        const messages = this.buildMultiMessagePayload(
-          'Project not found',
-          `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
-          true
-        );
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
         }
-        return true;
       }
 
-      scriptArgument = resolvedProject.projectKey;
+      if (resolvedProject) {
+        scriptArgument = resolvedProject.projectKey;
+      }
 
       if (parsed.commandName === 'project cost') {
         scriptArgument = parsedProjectCostInput?.yearNumber
