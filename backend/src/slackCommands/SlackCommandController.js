@@ -619,6 +619,14 @@ class SlackCommandController {
       args.push(scriptArgument);
     }
 
+    this.logger.info('runReportingScript', {
+      scriptCommand,
+      scriptArgument,
+      fullArgs: args,
+      fullCommand: `${process.execPath} ${args.join(' ')}`,
+      cwd: PROJECT_ROOT,
+    });
+
     return new Promise((resolve, reject) => {
       execFile(
         process.execPath,
@@ -631,6 +639,15 @@ class SlackCommandController {
         },
         (error, stdout, stderr) => {
           if (error) {
+            this.logger.error('runReportingScript ERROR', {
+              error: error.message,
+              errorCode: error.code,
+              errorSignal: error.signal,
+              killed: error.killed,
+              stdoutLength: stdout?.length,
+              stderrContent: stderr,
+              scriptCommand,
+            });
             reject({
               error,
               stdout,
@@ -639,6 +656,11 @@ class SlackCommandController {
             });
             return;
           }
+
+          this.logger.info('runReportingScript SUCCESS', {
+            scriptCommand,
+            stdoutLength: stdout?.length,
+          });
 
           resolve({ stdout, stderr });
         }
@@ -1009,7 +1031,19 @@ class SlackCommandController {
       command: parsed.commandName,
       scriptCommand: config.scriptCommand,
       hasInput: Boolean(inputText),
+      scriptArgumentDebug: Array.isArray(scriptArgument) ? scriptArgument : `string: ${scriptArgument}`,
     });
+
+    // Extra debug logging for project cost total
+    if (parsed.commandName === 'project cost total') {
+      logger.info('PROJECT_COST_TOTAL_DEBUG', {
+        commandName: parsed.commandName,
+        inputText,
+        scriptCommand: config.scriptCommand,
+        scriptArgument,
+        scriptArgumentType: Array.isArray(scriptArgument) ? 'array' : typeof scriptArgument,
+      });
+    }
 
     const isReportCommand = [
       'report w',

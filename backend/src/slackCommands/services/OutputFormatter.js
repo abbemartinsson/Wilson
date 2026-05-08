@@ -200,6 +200,47 @@ class OutputFormatter {
     return lines.join('\n');
   }
 
+  formatProjectCostTotal(reports) {
+    if (!Array.isArray(reports) || reports.length === 0) {
+      return this.formatPlainLinesAsBullets('No projects found.');
+    }
+
+    const lines = [];
+    let totalHours = 0;
+    let totalCost = 0;
+    let totalParticipants = 0;
+
+    // Summary line
+    const period = reports[0]?.period?.label || 'Unknown period';
+    lines.push(`📊 *All Projects - ${this.escapeMrkdwn(period)}*`);
+    lines.push('');
+
+    // Individual projects
+    for (const report of reports) {
+      const projectName = this.escapeMrkdwn(report.projectName || 'Unknown project');
+      const projectKey = this.escapeMrkdwn(report.projectKey || 'unknown key');
+      const hours = this.formatNumber(report.totalHours ?? 0);
+      const cost = this.formatCurrency(report.totalCost ?? 0);
+      const participants = this.formatNumber(report.participantCount ?? 0);
+
+      lines.push(`• ${projectName} (${projectKey}): ${hours} h, ${cost}, ${participants} contributors`);
+
+      totalHours += report.totalHours ?? 0;
+      totalCost += report.totalCost ?? 0;
+      totalParticipants += report.participantCount ?? 0;
+    }
+
+    // Summary section
+    lines.push('');
+    lines.push('*Summary:*');
+    lines.push(`• Total Hours: ${this.formatNumber(totalHours)} h`);
+    lines.push(`• Total Cost: ${this.formatCurrency(totalCost)}`);
+    lines.push(`• Total Participants: ${this.formatNumber(totalParticipants)}`);
+    lines.push(`• Projects: ${this.formatNumber(reports.length)}`);
+
+    return lines.join('\n');
+  }
+
   formatProjectParticipants(report) {
     if (!report || typeof report !== 'object') {
       return this.formatPlainLinesAsBullets(report);
@@ -426,6 +467,10 @@ class OutputFormatter {
 
     if (commandName === 'project cost') {
       return this.formatProjectCost(parsedOutput);
+    }
+
+    if (commandName === 'project cost total') {
+      return this.formatProjectCostTotal(parsedOutput);
     }
 
     if (commandName === 'project team') {

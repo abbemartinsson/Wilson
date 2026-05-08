@@ -269,7 +269,7 @@ const HELP_COMMAND_GROUPS = [
   {
     title: 'Admin',
     emoji: '🛠️',
-    commands: ['project cost', 'project cost total', 'project cost total', 'project cost total', 'user cost', 'user cost all'],
+    commands: ['project cost', 'project cost total', 'user cost', 'user cost all'],
   },
   {
     title: 'Integrations',
