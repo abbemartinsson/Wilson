@@ -75,8 +75,8 @@ async function main() {
       }
 
       const normalizedProjectInput = String(projectInput || '').trim().toLowerCase();
-      // Support special case: aggregate costs for all projects using '*' (allow 'all' as fallback)
-      if (normalizedProjectInput === '*' || normalizedProjectInput === 'all' || normalizedProjectInput === 'alla' || normalizedProjectInput === 'all projects' || normalizedProjectInput === 'alla projekt') {
+      // Support special case: aggregate costs for all projects using 'total' keyword
+      if (normalizedProjectInput === 'total') {
         try {
           const projects = await reportingService.getAllProjects();
           const results = [];

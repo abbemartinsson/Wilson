@@ -19,6 +19,11 @@ const commandMap = {
     requiresText: true,
     usage: 'project cost <project key or name> [year]',
   },
+  'project cost total': {
+    scriptCommand: 'project-cost',
+    requiresText: false,
+    usage: 'project cost total [year]',
+  },
   'user cost': {
     customHandler: 'user-cost-setup',
     requiresText: true,
@@ -185,7 +190,8 @@ const COMMAND_USAGE_TEXT = {
   help: 'help',
   'project info': 'project info <key_or_name>',
   'project last week': 'project last week <key_or_name>',
-  'project cost': 'project cost <key_or_name|*> [year]',
+  'project cost': 'project cost <key_or_name> [year]',
+  'project cost total': 'project cost total [year]',
   'report w': 'report w <project key or name>',
   'report m': 'report m <project key or name> [month]',
   'report wt': 'report wt <project key or name>',
@@ -210,6 +216,7 @@ const COMMAND_SHORT_DESCRIPTIONS = {
   'project info': 'Shows project details.',
   'project last week': 'Shows hours from last week.',
   'project cost': 'Shows total project cost, optionally for a specific year.',
+  'project cost total': 'Shows cost for all active projects, optionally for a specific year.',
   'report w': 'Time per issue for the last week.',
   'report m': 'Time per issue for the last month.',
   'report wt': 'Team time per issue, week.',
@@ -262,7 +269,7 @@ const HELP_COMMAND_GROUPS = [
   {
     title: 'Admin',
     emoji: '🛠️',
-    commands: ['project cost', 'user cost', 'user cost all'],
+    commands: ['project cost', 'project cost total', 'project cost total', 'project cost total', 'user cost', 'user cost all'],
   },
   {
     title: 'Integrations',

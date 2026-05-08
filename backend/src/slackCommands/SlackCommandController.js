@@ -854,7 +854,12 @@ class SlackCommandController {
       return true;
     }
 
-    if (
+    // Special handling for 'project cost total' - parse year but skip project resolution
+    if (parsed.commandName === 'project cost total') {
+      const yearMatch = inputText ? /(\d{4})/.exec(inputText) : null;
+      const yearNumber = yearMatch ? yearMatch[1] : null;
+      scriptArgument = yearNumber ? ['total', yearNumber] : 'total';
+    } else if (
       parsed.commandName === 'project info' ||
       parsed.commandName === 'project last week' ||
       parsed.commandName === 'project cost' ||
@@ -907,18 +912,7 @@ class SlackCommandController {
       }
 
       if (!resolvedProject) {
-          // Special-case: allow '*' (or 'all' as fallback) to mean all projects
-          const normalizedCandidate = String(projectInputForResolution || '').trim().toLowerCase();
-          if (
-            normalizedCandidate === '*' ||
-            normalizedCandidate === 'all' ||
-            normalizedCandidate === 'alla' ||
-            normalizedCandidate === 'all projects' ||
-            normalizedCandidate === 'alla projekt'
-          ) {
-            // pass through '*' as script argument and skip resolution
-            scriptArgument = parsedProjectCostInput?.yearNumber ? ['*', parsedProjectCostInput.yearNumber] : '*';
-          } else if (firstMultipleMatch) {
+          if (firstMultipleMatch) {
             const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
             const messages = this.buildMultiMessagePayload(
               'Multiple projects matched',
