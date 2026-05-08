@@ -223,6 +223,66 @@ class SlackCommandController {
     return messages;
   }
 
+  buildSectionBasedMessages(body, maxLinesPerMessage = 12) {
+    const safeBody = body && body.trim() ? body.trim() : 'No output.';
+    const lines = safeBody.split('\n');
+
+    if (lines.length <= maxLinesPerMessage) {
+      return [this.buildPlainMessagePayload(safeBody)];
+    }
+
+    // Split on sections marked by empty lines
+    const sections = [];
+    let currentSection = [];
+
+    for (const line of lines) {
+      if (line.trim() === '') {
+        if (currentSection.length > 0) {
+          sections.push(currentSection);
+          currentSection = [];
+        }
+      } else {
+        currentSection.push(line);
+      }
+    }
+
+    if (currentSection.length > 0) {
+      sections.push(currentSection);
+    }
+
+    // Group sections into messages respecting line limit
+    const messages = [];
+    let currentMessageLines = [];
+    let currentLineCount = 0;
+
+    for (let i = 0; i < sections.length; i++) {
+      const section = sections[i];
+      const sectionLineCount = section.length;
+      const needsSeparator = currentMessageLines.length > 0;
+      const totalLinesIfAdded = currentLineCount + sectionLineCount + (needsSeparator ? 1 : 0);
+
+      if (totalLinesIfAdded > maxLinesPerMessage && currentMessageLines.length > 0) {
+        messages.push(this.buildPlainMessagePayload(currentMessageLines.join('\n')));
+        currentMessageLines = [];
+        currentLineCount = 0;
+      }
+
+      if (needsSeparator) {
+        currentMessageLines.push('');
+        currentLineCount += 1;
+      }
+
+      currentMessageLines.push(...section);
+      currentLineCount += sectionLineCount;
+    }
+
+    if (currentMessageLines.length > 0) {
+      messages.push(this.buildPlainMessagePayload(currentMessageLines.join('\n')));
+    }
+
+    return messages.length > 0 ? messages : [this.buildPlainMessagePayload('No output.')];
+  }
+
   buildHelpMessagesWithGrouping(sections, maxLinesPerMessage = 8) {
     if (!Array.isArray(sections) || sections.length === 0) {
       return [this.buildPlainMessagePayload('No commands available.')];
@@ -1260,6 +1320,15 @@ class SlackCommandController {
 
       if (stderr) {
         const messages = this.buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
+        for (const message of messages) {
+          await this.postSlackMessage(client, channel, message, threadTs);
+        }
+        return true;
+      }
+
+      // For project cost total, use section-based splitting to preserve structure
+      if (parsed.commandName === 'project cost total') {
+        const messages = this.buildSectionBasedMessages(stdout);
         for (const message of messages) {
           await this.postSlackMessage(client, channel, message, threadTs);
         }
