@@ -852,12 +852,12 @@ class SlackCommandController {
     if (parsed.commandName === 'help') {
       logger.info('Showing help for text command', { command: parsed.commandName });
 
-      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
-      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
-
-      for (const message of messages) {
-        await this.postSlackMessage(client, channel, message, threadTs);
-      }
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload(roleAwareHelpMessage),
+        threadTs
+      );
       return true;
     }
 
