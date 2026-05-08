@@ -185,7 +185,7 @@ const COMMAND_USAGE_TEXT = {
   help: 'help',
   'project info': 'project info <key_or_name>',
   'project last week': 'project last week <key_or_name>',
-  'project cost': 'project cost <key_or_name> [year]',
+  'project cost': 'project cost <key_or_name|*> [year]',
   'report w': 'report w <project key or name>',
   'report m': 'report m <project key or name> [month]',
   'report wt': 'report wt <project key or name>',

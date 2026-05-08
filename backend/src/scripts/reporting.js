@@ -4,6 +4,12 @@ const reportingService = require('../forecasting/reportingService');
 
 const command = process.argv[2];
 
+// Early validation: ensure Supabase config is available to avoid opaque failures
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Supabase configuration is missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in environment or src/config/.env');
+  process.exit(1);
+}
+
 function parsePositiveInt(value, fallback) {
   if (value === undefined) {
     return fallback;
