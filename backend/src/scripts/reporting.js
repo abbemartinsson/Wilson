@@ -77,24 +77,32 @@ async function main() {
       const normalizedProjectInput = String(projectInput || '').trim().toLowerCase();
       // Support special case: aggregate costs for all projects using '*' (allow 'all' as fallback)
       if (normalizedProjectInput === '*' || normalizedProjectInput === 'all' || normalizedProjectInput === 'alla' || normalizedProjectInput === 'all projects' || normalizedProjectInput === 'alla projekt') {
-        const projects = await reportingService.getAllProjects();
-        const results = [];
-        for (const p of projects) {
-          try {
-            const report = reportingService.getProjectCostWithYears
-              ? await reportingService.getProjectCostWithYears(p.projectKey, yearInput ? { year: yearInput } : {})
-              : await reportingService.getProjectCost(p.projectKey, yearInput ? { year: yearInput } : {});
+        try {
+          const projects = await reportingService.getAllProjects();
+          const results = [];
+          for (const p of projects) {
+            try {
+              const report = reportingService.getProjectCostWithYears
+                ? await reportingService.getProjectCostWithYears(p.projectKey, yearInput ? { year: yearInput } : {})
+                : await reportingService.getProjectCost(p.projectKey, yearInput ? { year: yearInput } : {});
 
-            if (report) {
-              results.push(report);
+              if (report) {
+                results.push(report);
+              }
+            } catch (err) {
+              console.error(`Warning: failed to compute cost for project ${p.projectKey}: ${err && err.message}`);
             }
-          } catch (err) {
-            console.error(`Warning: failed to compute cost for project ${p.projectKey}: ${err && err.message}`);
           }
-        }
 
-        console.log(JSON.stringify(results, null, 2));
-        process.exit(0);
+          console.log(JSON.stringify(results, null, 2));
+          process.exit(0);
+        } catch (err) {
+          console.error(`Fatal error aggregating project costs: ${err && err.message}`);
+          if (err && err.stack) {
+            console.error(err.stack);
+          }
+          process.exit(1);
+        }
       }
 
       const report = await reportingService.getProjectCostWithYears

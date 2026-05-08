@@ -918,22 +918,29 @@ class SlackCommandController {
           ) {
             // pass through '*' as script argument and skip resolution
             scriptArgument = parsedProjectCostInput?.yearNumber ? ['*', parsedProjectCostInput.yearNumber] : '*';
+          } else if (firstMultipleMatch) {
+            const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
+            const messages = this.buildMultiMessagePayload(
+              'Multiple projects matched',
+              `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
+              true
+            );
+            for (const message of messages) {
+              await this.postSlackMessage(client, channel, message, threadTs);
+            }
+            return true;
           } else {
-        if (firstMultipleMatch) {
-          const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
-          const messages = this.buildMultiMessagePayload(
-            'Multiple projects matched',
-            `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
-            true
-          );
-          for (const message of messages) {
-            await this.postSlackMessage(client, channel, message, threadTs);
+            const messages = this.buildMultiMessagePayload(
+              'Project not found',
+              `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
+              true
+            );
+            for (const message of messages) {
+              await this.postSlackMessage(client, channel, message, threadTs);
+            }
+            return true;
           }
-          return true;
         }
-
-        }
-      }
 
       if (resolvedProject) {
         scriptArgument = resolvedProject.projectKey;
