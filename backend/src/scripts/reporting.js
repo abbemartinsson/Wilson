@@ -1,4 +1,6 @@
-require('dotenv').config({ path: './src/config/.env' });
+const path = require('path');
+// Load .env relative to this script file to avoid depending on process.cwd()
+require('dotenv').config({ path: path.join(__dirname, '..', 'config', '.env') });
 
 const reportingService = require('../forecasting/reportingService');
 
