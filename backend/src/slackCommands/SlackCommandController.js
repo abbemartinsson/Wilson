@@ -26,7 +26,7 @@ const chartGeneratorService = require('../services/chartGeneratorService');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const REPORTING_SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'reporting.js');
-const COMMAND_TIMEOUT_MS = Number.parseInt(process.env.SLACK_COMMAND_TIMEOUT_MS, 10) || 60000;
+const COMMAND_TIMEOUT_MS = Number.parseInt(process.env.SLACK_COMMAND_TIMEOUT_MS, 10) || 300000;
 const MAX_OUTPUT_CHARS = Number.parseInt(process.env.SLACK_COMMAND_MAX_OUTPUT_CHARS, 10) || 3500;
 
 class SlackCommandController {
@@ -937,46 +937,40 @@ class SlackCommandController {
 
       if (resolvedProject) {
         scriptArgument = resolvedProject.projectKey;
-      }
 
-      if (parsed.commandName === 'project cost') {
-        scriptArgument = parsedProjectCostInput?.yearNumber
-          ? [resolvedProject.projectKey, parsedProjectCostInput.yearNumber]
-          : resolvedProject.projectKey;
-      }
+        if (parsed.commandName === 'report w') {
+          scriptArgument = [resolvedProject.projectKey, 'week'];
+        }
 
-      if (parsed.commandName === 'report w') {
-        scriptArgument = [resolvedProject.projectKey, 'week'];
-      }
+        if (parsed.commandName === 'report m') {
+          const monthNumber =
+            isMonthlyReportCommand &&
+              parsedMonthlyInput &&
+              parsedMonthlyInput.projectInput === resolvedFromInput
+              ? parsedMonthlyInput.monthNumber
+              : null;
 
-      if (parsed.commandName === 'report m') {
-        const monthNumber =
-          isMonthlyReportCommand &&
-            parsedMonthlyInput &&
-            parsedMonthlyInput.projectInput === resolvedFromInput
-            ? parsedMonthlyInput.monthNumber
-            : null;
+          scriptArgument = monthNumber
+            ? [resolvedProject.projectKey, 'month', monthNumber]
+            : [resolvedProject.projectKey, 'month'];
+        }
 
-        scriptArgument = monthNumber
-          ? [resolvedProject.projectKey, 'month', monthNumber]
-          : [resolvedProject.projectKey, 'month'];
-      }
+        if (parsed.commandName === 'report wt') {
+          scriptArgument = [resolvedProject.projectKey, 'week'];
+        }
 
-      if (parsed.commandName === 'report wt') {
-        scriptArgument = [resolvedProject.projectKey, 'week'];
-      }
+        if (parsed.commandName === 'report mt') {
+          const monthNumber =
+            isMonthlyReportCommand &&
+              parsedMonthlyInput &&
+              parsedMonthlyInput.projectInput === resolvedFromInput
+              ? parsedMonthlyInput.monthNumber
+              : null;
 
-      if (parsed.commandName === 'report mt') {
-        const monthNumber =
-          isMonthlyReportCommand &&
-            parsedMonthlyInput &&
-            parsedMonthlyInput.projectInput === resolvedFromInput
-            ? parsedMonthlyInput.monthNumber
-            : null;
-
-        scriptArgument = monthNumber
-          ? [resolvedProject.projectKey, 'month', monthNumber]
-          : [resolvedProject.projectKey, 'month'];
+          scriptArgument = monthNumber
+            ? [resolvedProject.projectKey, 'month', monthNumber]
+            : [resolvedProject.projectKey, 'month'];
+        }
       }
     }
 
