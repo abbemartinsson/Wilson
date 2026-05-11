@@ -1090,29 +1090,29 @@ class SlackCommandController {
       }
 
       if (!resolvedProject) {
-          if (firstMultipleMatch) {
-            const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
-            const messages = this.buildMultiMessagePayload(
-              'Multiple projects matched',
-              `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
-              true
-            );
-            for (const message of messages) {
-              await this.postSlackMessage(client, channel, message, threadTs);
-            }
-            return true;
-          } else {
-            const messages = this.buildMultiMessagePayload(
-              'Project not found',
-              `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
-              true
-            );
-            for (const message of messages) {
-              await this.postSlackMessage(client, channel, message, threadTs);
-            }
-            return true;
+        if (firstMultipleMatch) {
+          const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
+          const messages = this.buildMultiMessagePayload(
+            'Multiple projects matched',
+            `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
+            true
+          );
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
           }
+          return true;
+        } else {
+          const messages = this.buildMultiMessagePayload(
+            'Project not found',
+            `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
+            true
+          );
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
+          }
+          return true;
         }
+      }
 
       if (resolvedProject) {
         scriptArgument = resolvedProject.projectKey;
