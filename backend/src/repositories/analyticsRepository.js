@@ -582,12 +582,14 @@ async function getProjectParticipants(input) {
 	};
 }
 
-async function getProjectCostReport(input) {
+async function getProjectCostReport(input, options = {}) {
 	const normalizedInput = String(input || '').trim();
 
 	if (!normalizedInput) {
 		throw new Error('Project key or name is required');
 	}
+
+	const { startDate, endDate } = options;
 
 	const project = await findProjectByKeyOrName(normalizedInput);
 	if (!project) {
@@ -612,20 +614,74 @@ async function getProjectCostReport(input) {
 	const issueIdChunks = chunkArray(issueIds, 200);
 	const participantsMap = new Map();
 
+	// Prepare yearly accumulation (bucket by Europe/Stockholm year)
+	const yearsMap = new Map();
+	const yearUserSets = new Map();
+	const yearlyUserHoursMap = new Map(); // Track hours per user per year
+	const dateFormatter = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Stockholm', year: 'numeric', month: '2-digit', day: '2-digit' });
+
 	for (const chunk of issueIdChunks) {
-		const { data, error } = await supabase
+		let baseQuery = supabase
 			.from(WORKLOGS_TABLE)
-			.select('user_id, time_spent_seconds')
+			.select('user_id, time_spent_seconds, started_at')
 			.in('issue_id', chunk);
 
-		if (error) {
-			throw error;
+		if (startDate) {
+			baseQuery = baseQuery.gte('started_at', startDate.toISOString());
 		}
 
-		const rows = data || [];
-		for (const row of rows) {
+		if (endDate) {
+			baseQuery = baseQuery.lte('started_at', endDate.toISOString());
+		}
+
+		// Fetch all rows for this chunk with pagination
+		const pageSize = 1000;
+		let from = 0;
+		let hasMore = true;
+
+		while (hasMore) {
+			const to = from + pageSize - 1;
+			let query = baseQuery;
+			const { data, error } = await query.range(from, to);
+
+			if (error) {
+				throw error;
+			}
+
+			const rows = data || [];
+			for (const row of rows) {
 			if (!row.user_id) {
 				continue;
+			}
+
+			// Yearly accumulation based on Stockholm local date
+			try {
+				const parts = dateFormatter.formatToParts(new Date(row.started_at));
+				let y = null;
+				for (const p of parts) {
+					if (p.type === 'year') {
+						y = Number.parseInt(p.value, 10);
+						break;
+					}
+				}
+				if (!y) {
+					y = new Date(row.started_at).getUTCFullYear();
+				}
+				yearsMap.set(y, (yearsMap.get(y) || 0) + (row.time_spent_seconds || 0));
+				const set = yearUserSets.get(y) || new Set();
+				if (row.user_id !== undefined && row.user_id !== null) set.add(row.user_id);
+				yearUserSets.set(y, set);
+				
+				// Track hours per user per year
+				const yearKey = `${y}`;
+				const userYearKey = `${row.user_id}`;
+				if (!yearlyUserHoursMap.has(yearKey)) {
+					yearlyUserHoursMap.set(yearKey, new Map());
+				}
+				const userHoursInYear = yearlyUserHoursMap.get(yearKey);
+				userHoursInYear.set(userYearKey, (userHoursInYear.get(userYearKey) || 0) + (row.time_spent_seconds || 0));
+			} catch (err) {
+				// ignore year grouping errors
 			}
 
 			if (!participantsMap.has(row.user_id)) {
@@ -637,6 +693,10 @@ async function getProjectCostReport(input) {
 
 			const participant = participantsMap.get(row.user_id);
 			participant.totalSeconds += row.time_spent_seconds || 0;
+			}
+
+			hasMore = rows.length === pageSize;
+			from += pageSize;
 		}
 	}
 
@@ -708,6 +768,34 @@ async function getProjectCostReport(input) {
 		return rightCost - leftCost;
 	});
 
+	// Build previous_years from yearsMap with costs
+	const previous_years = Array.from(yearsMap.entries())
+		.sort((a, b) => b[0] - a[0])
+		.map(([year, totalSeconds]) => {
+			const yearKey = `${year}`;
+			const userHoursInYear = yearlyUserHoursMap.get(yearKey) || new Map();
+			let yearCost = 0;
+			
+			// Calculate cost for this year based on user hours and their cost per hour
+			for (const [userIdStr, secondsWorked] of userHoursInYear.entries()) {
+				const userId = userIdStr;
+				const hoursWorked = secondsWorked / 3600;
+				const userDetails = userDetailsMap.get(userId);
+				const costPerHour = userDetails?.cost ? Number(userDetails.cost) : null;
+				
+				if (Number.isFinite(costPerHour)) {
+					yearCost += hoursWorked * costPerHour;
+				}
+			}
+			
+			return {
+				year,
+				total_hours: Math.round((totalSeconds / 3600 + Number.EPSILON) * 100) / 100,
+				total_cost: roundToTwoDecimals(yearCost),
+				active_users: (yearUserSets.get(year) || new Set()).size,
+			};
+		});
+
 	return {
 		projectId: project.id,
 		projectKey: project.jira_project_key,
@@ -719,6 +807,7 @@ async function getProjectCostReport(input) {
 		totalParticipants: participants.length,
 		missingCostUsers,
 		missingCostCount: missingCostUsers.length,
+		previous_years,
 	};
 }
 

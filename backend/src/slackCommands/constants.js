@@ -7,22 +7,32 @@ const commandMap = {
   'project info': {
     scriptCommand: 'get-project-info',
     requiresText: true,
-    usage: 'project info <project_key_or_name>',
+    usage: 'project info <project key or name>',
   },
   'project last week': {
     scriptCommand: 'project-last-week-hours',
     requiresText: true,
-    usage: 'project last week <project_key_or_name>',
+    usage: 'project last week <project key or name>',
   },
   'project cost': {
     scriptCommand: 'project-cost',
     requiresText: true,
-    usage: 'project cost <project_key_or_name>',
+    usage: 'project cost <project key or name> [year]',
+  },
+  'project cost total': {
+    scriptCommand: 'project-cost',
+    requiresText: false,
+    usage: 'project cost total [year]',
   },
   'user cost': {
     customHandler: 'user-cost-setup',
     requiresText: true,
     usage: 'user cost <first_name>',
+  },
+  'user cost all': {
+    customHandler: 'user-cost-list',
+    requiresText: false,
+    usage: 'user cost all',
   },
   worklog: {
     customHandler: 'worklog-setup',
@@ -31,7 +41,7 @@ const commandMap = {
   'project team': {
     scriptCommand: 'project-participants',
     requiresText: true,
-    usage: 'project team <project_key_or_name>',
+    usage: 'project team <project key or name>',
   },
   'report w': {
     scriptCommand: 'project-worklog-report',
@@ -96,15 +106,44 @@ const commandMap = {
     usage: 'lo siento',
     hidden: true,
   },
+  'fortnox login': {
+    customHandler: 'fortnox-login',
+    usage: 'fortnox login',
+  },
 };
 
 const ROLE_PERMISSION_CONFIG = {
-  admin: { all: true },
+  admin: {
+    all: true,
+    exclude: ['fortnox login'],
+  },
   member: {
     commands: [
       'help',
       'project info',
       'project last week',
+      'projects',
+      'forecast',
+      'project team',
+      'history',
+      'full history',
+      'worklog',
+      'reminder setup',
+      'reminder update',
+      'reminder status',
+      'reminder hours',
+    ],
+  },
+  developer: {
+    commands: [
+      'help',
+      'fortnox login',
+      'project info',
+      'project last week',
+      'report w',
+      'report m',
+      'report wt',
+      'report mt',
       'projects',
       'forecast',
       'project team',
@@ -143,6 +182,7 @@ const ROLE_PERMISSION_CONFIG = {
 const ROLE_LABELS = {
   admin: 'Admin',
   member: 'Member',
+  developer: 'Developer',
   'project manager': 'Project manager',
 };
 
@@ -150,12 +190,14 @@ const COMMAND_USAGE_TEXT = {
   help: 'help',
   'project info': 'project info <key_or_name>',
   'project last week': 'project last week <key_or_name>',
-  'project cost': 'project cost <key_or_name>',
+  'project cost': 'project cost <key_or_name> [year]',
+  'project cost total': 'project cost total [year]',
   'report w': 'report w <project key or name>',
   'report m': 'report m <project key or name> [month]',
   'report wt': 'report wt <project key or name>',
   'report mt': 'report mt <project key or name> [month]',
   'user cost': 'user cost <first_name>',
+  'user cost all': 'user cost all',
   worklog: 'worklog',
   'project team': 'project team <key_or_name>',
   projects: 'projects',
@@ -170,14 +212,17 @@ const COMMAND_USAGE_TEXT = {
 
 const COMMAND_SHORT_DESCRIPTIONS = {
   help: 'Shows all commands.',
+  'fortnox login': 'Starts the Fortnox authorization flow.',
   'project info': 'Shows project details.',
   'project last week': 'Shows hours from last week.',
-  'project cost': 'Shows total project cost.',
+  'project cost': 'Shows total project cost, optionally for a specific year.',
+  'project cost total': 'Shows cost for all active projects, optionally for a specific year.',
   'report w': 'Time per issue for the last week.',
   'report m': 'Time per issue for the last month.',
   'report wt': 'Team time per issue, week.',
   'report mt': 'Team time per issue, month.',
   'user cost': 'Sets a user hourly cost.',
+  'user cost all': 'Lists all users with email and their cost status.',
   worklog: 'Logs time on one of your issues.',
   'project team': 'Shows project contributors.',
   projects: 'Lists all active projects.',
@@ -224,7 +269,12 @@ const HELP_COMMAND_GROUPS = [
   {
     title: 'Admin',
     emoji: '🛠️',
-    commands: ['project cost', 'user cost'],
+    commands: ['project cost', 'project cost total', 'user cost', 'user cost all'],
+  },
+  {
+    title: 'Integrations',
+    emoji: '🔗',
+    commands: ['fortnox login'],
   },
 ];
 

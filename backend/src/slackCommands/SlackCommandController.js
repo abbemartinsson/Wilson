@@ -26,7 +26,7 @@ const chartGeneratorService = require('../services/chartGeneratorService');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const REPORTING_SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'reporting.js');
-const COMMAND_TIMEOUT_MS = Number.parseInt(process.env.SLACK_COMMAND_TIMEOUT_MS, 10) || 60000;
+const COMMAND_TIMEOUT_MS = Number.parseInt(process.env.SLACK_COMMAND_TIMEOUT_MS, 10) || 300000;
 const MAX_OUTPUT_CHARS = Number.parseInt(process.env.SLACK_COMMAND_MAX_OUTPUT_CHARS, 10) || 3500;
 
 class SlackCommandController {
@@ -189,38 +189,102 @@ class SlackCommandController {
     }
 
     const safeBody = body && body.trim() ? body.trim() : 'No output.';
-    const maxLinesPerMessage = Number.parseInt(options.maxLinesPerMessage, 10) || 4;
-    const lines = safeBody.split('\n');
-
-    if (lines.length <= maxLinesPerMessage) {
-      return [this.buildPlainMessagePayload(safeBody)];
-    }
-
-    const messages = [];
-    for (let i = 0; i < lines.length; i += maxLinesPerMessage) {
-      const chunk = lines.slice(i, Math.min(i + maxLinesPerMessage, lines.length)).join('\n');
-      messages.push(this.buildPlainMessagePayload(chunk));
-    }
-
-    return messages;
+    return [this.buildPlainMessagePayload(safeBody)];
   }
 
   buildSplitPlainMessages(body, options = {}) {
     const safeBody = body && body.trim() ? body.trim() : 'No output.';
-    const maxLinesPerMessage = Number.parseInt(options.maxLinesPerMessage, 10) || 4;
-    const lines = safeBody.split('\n');
+    return [this.buildPlainMessagePayload(safeBody)];
+  }
 
-    if (lines.length <= maxLinesPerMessage) {
-      return [this.buildPlainMessagePayload(safeBody)];
+  buildSectionBasedMessages(body, maxLinesPerMessage = 12) {
+    const safeBody = body && body.trim() ? body.trim() : 'No output.';
+    return [this.buildPlainMessagePayload(safeBody)];
+  }
+
+  buildHelpMessagesWithGrouping(sections, maxLinesPerMessage = 8) {
+    if (!Array.isArray(sections) || sections.length === 0) {
+      return [this.buildPlainMessagePayload('No commands available.')];
     }
 
     const messages = [];
-    for (let i = 0; i < lines.length; i += maxLinesPerMessage) {
-      const chunk = lines.slice(i, Math.min(i + maxLinesPerMessage, lines.length)).join('\n');
-      messages.push(this.buildPlainMessagePayload(chunk));
+    let currentMessageLines = [];
+    let currentLineCount = 0;
+
+    for (const section of sections) {
+      const sectionLineCount = section.lines.length;
+      const totalLinesIfAdded = currentLineCount + sectionLineCount + (currentLineCount > 0 ? 1 : 0); // +1 for spacing
+
+      // If adding this section would exceed maxLines and we have content, start new message
+      if (totalLinesIfAdded > maxLinesPerMessage && currentMessageLines.length > 0) {
+        messages.push(this.buildPlainMessagePayload(currentMessageLines.join('\n')));
+        currentMessageLines = [];
+        currentLineCount = 0;
+      }
+
+      // Add spacing between sections (but not before header or after previous spacing)
+      if (currentMessageLines.length > 0 && !currentMessageLines[currentMessageLines.length - 1].endsWith('')) {
+        currentMessageLines.push('');
+        currentLineCount += 1;
+      }
+
+      currentMessageLines.push(...section.lines);
+      currentLineCount += sectionLineCount;
     }
 
-    return messages;
+    if (currentMessageLines.length > 0) {
+      messages.push(this.buildPlainMessagePayload(currentMessageLines.join('\n')));
+    }
+
+    return messages.length > 0 ? messages : [this.buildPlainMessagePayload('No commands available.')];
+  }
+
+  buildUserCostListMessage(users) {
+    const userList = Array.isArray(users) ? users : [];
+
+    if (userList.length === 0) {
+      return '• 👤 Users with email\n  No users with email found.';
+    }
+
+    const usersWithCost = [];
+    const usersWithoutCost = [];
+
+    for (const user of userList) {
+      const name = this.formatter.escapeMrkdwn(user.name || 'Unknown user');
+      const email = this.formatter.escapeMrkdwn(user.email || 'Unknown email');
+      const hasCost = user.cost !== null && user.cost !== undefined && String(user.cost).trim() !== '';
+
+      const costText = hasCost ? this.formatter.formatCurrency(user.cost) : 'no cost set';
+      const entry = `  - ${this.formatter.formatInlineCode(`${name} (${email}) - ${costText}`)}`;
+
+      if (hasCost) {
+        usersWithCost.push(entry);
+      } else {
+        usersWithoutCost.push(entry);
+      }
+    }
+
+    const lines = [`• 👤 Users with email (${userList.length} total)`, ''];
+
+    lines.push(`  Users with cost (${usersWithCost.length}):`);
+    if (usersWithCost.length > 0) {
+      lines.push(...usersWithCost);
+    } else {
+      lines.push('  - None');
+    }
+
+    lines.push('');
+    lines.push(`  Users without cost (${usersWithoutCost.length}):`);
+    if (usersWithoutCost.length > 0) {
+      lines.push(...usersWithoutCost);
+    } else {
+      lines.push('  - None');
+    }
+
+    lines.push('');
+    lines.push(`  Summary: ${usersWithCost.length} with cost, ${usersWithoutCost.length} without cost`);
+
+    return lines.join('\n');
   }
 
   async postSlackMessage(client, channel, payload, threadTs) {
@@ -233,6 +297,48 @@ class SlackCommandController {
 
   async sendPlainTextMessage(client, channel, body, threadTs) {
     await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
+  }
+
+  getPublicBaseUrl() {
+    const explicitBaseUrl = String(process.env.APP_BASE_URL || '').trim().replace(/\/$/, '');
+    if (explicitBaseUrl) {
+      return explicitBaseUrl;
+    }
+
+    const explicitStartUrl = String(process.env.FORTNOX_START_URL || '').trim().replace(/\/$/, '');
+    if (explicitStartUrl) {
+      return explicitStartUrl.replace(/\/auth\/fortnox\/start\/?$/, '');
+    }
+
+    const redirectUrl = String(process.env.FORTNOX_REDIRECT_URL || '').trim();
+    if (redirectUrl) {
+      const inferredBaseUrl = redirectUrl.replace(/\/auth\/fortnox\/callback\/?$/, '').replace(/\/auth\/fortnox\/start\/?$/, '');
+      if (inferredBaseUrl) {
+        return inferredBaseUrl;
+      }
+    }
+
+    const railwayDomain =
+      String(process.env.RAILWAY_PUBLIC_DOMAIN || '').trim() ||
+      String(process.env.RAILWAY_STATIC_URL || '').trim() ||
+      String(process.env.RAILWAY_DOMAIN || '').trim();
+
+    if (railwayDomain) {
+      return railwayDomain.startsWith('http://') || railwayDomain.startsWith('https://')
+        ? railwayDomain.replace(/\/$/, '')
+        : `https://${railwayDomain.replace(/\/$/, '')}`;
+    }
+
+    return null;
+  }
+
+  getFortnoxStartUrl(slackUserId) {
+    const publicBaseUrl = this.getPublicBaseUrl();
+    if (publicBaseUrl) {
+      return `${publicBaseUrl}/auth/fortnox/start?slack_user_id=${encodeURIComponent(slackUserId)}`;
+    }
+
+    return null;
   }
 
   async uploadPDFFile(client, channel, pdfStream, filename, title, threadTs) {
@@ -429,6 +535,45 @@ class SlackCommandController {
     return { projectInput: normalizedInput, monthNumber: null };
   }
 
+  parseProjectCostInput(inputText) {
+    const normalizedInput = String(inputText || '').trim();
+    if (!normalizedInput) {
+      return { projectInput: normalizedInput, yearNumber: null };
+    }
+
+    const inputParts = normalizedInput.split(/\s+/);
+    if (inputParts.length < 2) {
+      return { projectInput: normalizedInput, yearNumber: null };
+    }
+
+    const tryParseYearToken = (token) => {
+      if (!/^\d{4}$/.test(token)) {
+        return null;
+      }
+
+      const parsedYear = Number.parseInt(token, 10);
+      return parsedYear >= 1900 && parsedYear <= 2100 ? parsedYear : null;
+    };
+
+    const trailingYear = tryParseYearToken(inputParts[inputParts.length - 1]);
+    if (trailingYear) {
+      return {
+        projectInput: inputParts.slice(0, -1).join(' ').trim(),
+        yearNumber: trailingYear,
+      };
+    }
+
+    const leadingYear = tryParseYearToken(inputParts[0]);
+    if (leadingYear) {
+      return {
+        projectInput: inputParts.slice(1).join(' ').trim(),
+        yearNumber: leadingYear,
+      };
+    }
+
+    return { projectInput: normalizedInput, yearNumber: null };
+  }
+
   normalizeProjectInput(value = '') {
     return String(value).trim().toLowerCase();
   }
@@ -490,6 +635,14 @@ class SlackCommandController {
       args.push(scriptArgument);
     }
 
+    this.logger.info('runReportingScript', {
+      scriptCommand,
+      scriptArgument,
+      fullArgs: args,
+      fullCommand: `${process.execPath} ${args.join(' ')}`,
+      cwd: PROJECT_ROOT,
+    });
+
     return new Promise((resolve, reject) => {
       execFile(
         process.execPath,
@@ -502,6 +655,15 @@ class SlackCommandController {
         },
         (error, stdout, stderr) => {
           if (error) {
+            this.logger.error('runReportingScript ERROR', {
+              error: error.message,
+              errorCode: error.code,
+              errorSignal: error.signal,
+              killed: error.killed,
+              stdoutLength: stdout?.length,
+              stderrContent: stderr,
+              scriptCommand,
+            });
             reject({
               error,
               stdout,
@@ -510,6 +672,11 @@ class SlackCommandController {
             });
             return;
           }
+
+          this.logger.info('runReportingScript SUCCESS', {
+            scriptCommand,
+            stdoutLength: stdout?.length,
+          });
 
           resolve({ stdout, stderr });
         }
@@ -563,7 +730,15 @@ class SlackCommandController {
         text: this.sanitizeInput(text),
       });
 
-      const messages = this.buildMultiMessagePayload('Unknown command', roleAwareHelpMessage, true);
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload('❌ Unknown command. Here are the available commands:'),
+        threadTs
+      );
+
+      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
+      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
       }
@@ -578,11 +753,15 @@ class SlackCommandController {
         userRole,
       });
 
-      const messages = this.buildMultiMessagePayload(
-        'Access denied',
-        `You do not have permission for ${this.commandPrefix}${parsed.commandName}.\n\n${roleAwareHelpMessage}`,
-        true
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload(`🔒 You do not have permission for \`${this.commandPrefix}${parsed.commandName}\`. Here are your available commands:`),
+        threadTs
       );
+
+      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
+      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
       }
@@ -592,11 +771,12 @@ class SlackCommandController {
     if (parsed.commandName === 'help') {
       logger.info('Showing help for text command', { command: parsed.commandName });
 
-      const messages = this.buildSplitPlainMessages(roleAwareHelpMessage, { maxLinesPerMessage: 4 });
-
-      for (const message of messages) {
-        await this.postSlackMessage(client, channel, message, threadTs);
-      }
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload(roleAwareHelpMessage),
+        threadTs
+      );
       return true;
     }
 
@@ -619,6 +799,18 @@ class SlackCommandController {
         slackUserId,
         sanitizeInput: this.sanitizeInput.bind(this),
       });
+    }
+
+    if (config.customHandler === 'user-cost-list') {
+      const users = await userRepository.listUsersWithEmailAndCost();
+      const body = this.buildUserCostListMessage(users);
+      const messages = this.buildSplitPlainMessages(body, { maxLinesPerMessage: 10 });
+
+      for (const message of messages) {
+        await this.postSlackMessage(client, channel, message, threadTs);
+      }
+
+      return true;
     }
 
     if (config.customHandler === 'worklog-setup') {
@@ -674,19 +866,59 @@ class SlackCommandController {
       return true;
     }
 
+    if (config.customHandler === 'fortnox-login') {
+      if (!slackUserId) {
+        await this.postSlackMessage(
+          client,
+          channel,
+          this.buildPlainMessagePayload('I could not identify your Slack account.'),
+          threadTs
+        );
+        return true;
+      }
+
+      const loginUrl = this.getFortnoxStartUrl(slackUserId);
+      if (!loginUrl) {
+        await this.postSlackMessage(
+          client,
+          channel,
+          this.buildPlainMessagePayload('Could not resolve a public URL for Fortnox login. Set APP_BASE_URL, FORTNOX_START_URL, FORTNOX_REDIRECT_URL, or a Railway public domain variable.'),
+          threadTs
+        );
+        return true;
+      }
+
+      const body = `Open Fortnox login here: <${loginUrl}|Connect Fortnox>`;
+      await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
+      return true;
+    }
+
     const inputText = this.sanitizeInput(parsed.commandText);
     let scriptArgument = inputText || undefined;
     let projectInputForResolution = inputText;
 
     if (config.requiresText && !inputText) {
-      const messages = this.buildMultiMessagePayload('Missing input', `Usage: ${config.usage}\n\n${roleAwareHelpMessage}`, true);
+      await this.postSlackMessage(
+        client,
+        channel,
+        this.buildPlainMessagePayload(`ℹ️ Missing required input.\nUsage: \`${config.usage}\``),
+        threadTs
+      );
+
+      const helpSections = this.roleAccessService.buildHelpSectionsByRole(userRole);
+      const messages = this.buildHelpMessagesWithGrouping(helpSections, 10);
       for (const message of messages) {
         await this.postSlackMessage(client, channel, message, threadTs);
       }
       return true;
     }
 
-    if (
+    // Special handling for 'project cost total' - parse year but skip project resolution
+    if (parsed.commandName === 'project cost total') {
+      const yearMatch = inputText ? /(\d{4})/.exec(inputText) : null;
+      const yearNumber = yearMatch ? yearMatch[1] : null;
+      scriptArgument = yearNumber ? ['total', yearNumber] : 'total';
+    } else if (
       parsed.commandName === 'project info' ||
       parsed.commandName === 'project last week' ||
       parsed.commandName === 'project cost' ||
@@ -698,8 +930,13 @@ class SlackCommandController {
       const isMonthlyReportCommand =
         parsed.commandName === 'report m' || parsed.commandName === 'report mt';
       const parsedMonthlyInput = isMonthlyReportCommand ? this.parseMonthlyReportInput(inputText) : null;
+      const parsedProjectCostInput = parsed.commandName === 'project cost'
+        ? this.parseProjectCostInput(inputText)
+        : null;
 
-      const projectInputCandidates = [projectInputForResolution];
+      const projectInputCandidates = [
+        parsedProjectCostInput?.projectInput || projectInputForResolution,
+      ];
       if (
         parsedMonthlyInput &&
         parsedMonthlyInput.projectInput &&
@@ -734,64 +971,66 @@ class SlackCommandController {
       }
 
       if (!resolvedProject) {
-        if (firstMultipleMatch) {
-          const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
-          const messages = this.buildMultiMessagePayload(
-            'Multiple projects matched',
-            `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
-            true
-          );
-          for (const message of messages) {
-            await this.postSlackMessage(client, channel, message, threadTs);
+          if (firstMultipleMatch) {
+            const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
+            const messages = this.buildMultiMessagePayload(
+              'Multiple projects matched',
+              `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
+              true
+            );
+            for (const message of messages) {
+              await this.postSlackMessage(client, channel, message, threadTs);
+            }
+            return true;
+          } else {
+            const messages = this.buildMultiMessagePayload(
+              'Project not found',
+              `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
+              true
+            );
+            for (const message of messages) {
+              await this.postSlackMessage(client, channel, message, threadTs);
+            }
+            return true;
           }
-          return true;
         }
 
-        const messages = this.buildMultiMessagePayload(
-          'Project not found',
-          `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
-          true
-        );
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
+      if (resolvedProject) {
+        scriptArgument = resolvedProject.projectKey;
+
+        if (parsed.commandName === 'report w') {
+          scriptArgument = [resolvedProject.projectKey, 'week'];
         }
-        return true;
-      }
 
-      scriptArgument = resolvedProject.projectKey;
+        if (parsed.commandName === 'report m') {
+          const monthNumber =
+            isMonthlyReportCommand &&
+              parsedMonthlyInput &&
+              parsedMonthlyInput.projectInput === resolvedFromInput
+              ? parsedMonthlyInput.monthNumber
+              : null;
 
-      if (parsed.commandName === 'report w') {
-        scriptArgument = [resolvedProject.projectKey, 'week'];
-      }
+          scriptArgument = monthNumber
+            ? [resolvedProject.projectKey, 'month', monthNumber]
+            : [resolvedProject.projectKey, 'month'];
+        }
 
-      if (parsed.commandName === 'report m') {
-        const monthNumber =
-          isMonthlyReportCommand &&
-            parsedMonthlyInput &&
-            parsedMonthlyInput.projectInput === resolvedFromInput
-            ? parsedMonthlyInput.monthNumber
-            : null;
+        if (parsed.commandName === 'report wt') {
+          scriptArgument = [resolvedProject.projectKey, 'week'];
+        }
 
-        scriptArgument = monthNumber
-          ? [resolvedProject.projectKey, 'month', monthNumber]
-          : [resolvedProject.projectKey, 'month'];
-      }
+        if (parsed.commandName === 'report mt') {
+          const monthNumber =
+            isMonthlyReportCommand &&
+              parsedMonthlyInput &&
+              parsedMonthlyInput.projectInput === resolvedFromInput
+              ? parsedMonthlyInput.monthNumber
+              : null;
 
-      if (parsed.commandName === 'report wt') {
-        scriptArgument = [resolvedProject.projectKey, 'week'];
-      }
-
-      if (parsed.commandName === 'report mt') {
-        const monthNumber =
-          isMonthlyReportCommand &&
-            parsedMonthlyInput &&
-            parsedMonthlyInput.projectInput === resolvedFromInput
-            ? parsedMonthlyInput.monthNumber
-            : null;
-
-        scriptArgument = monthNumber
-          ? [resolvedProject.projectKey, 'month', monthNumber]
-          : [resolvedProject.projectKey, 'month'];
+          scriptArgument = monthNumber
+            ? [resolvedProject.projectKey, 'month', monthNumber]
+            : [resolvedProject.projectKey, 'month'];
+        }
       }
     }
 
@@ -829,7 +1068,19 @@ class SlackCommandController {
       command: parsed.commandName,
       scriptCommand: config.scriptCommand,
       hasInput: Boolean(inputText),
+      scriptArgumentDebug: Array.isArray(scriptArgument) ? scriptArgument : `string: ${scriptArgument}`,
     });
+
+    // Extra debug logging for project cost total
+    if (parsed.commandName === 'project cost total') {
+      logger.info('PROJECT_COST_TOTAL_DEBUG', {
+        commandName: parsed.commandName,
+        inputText,
+        scriptCommand: config.scriptCommand,
+        scriptArgument,
+        scriptArgumentType: Array.isArray(scriptArgument) ? 'array' : typeof scriptArgument,
+      });
+    }
 
     const isReportCommand = [
       'report w',
@@ -988,6 +1239,15 @@ class SlackCommandController {
 
       if (stderr) {
         const messages = this.buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
+        for (const message of messages) {
+          await this.postSlackMessage(client, channel, message, threadTs);
+        }
+        return true;
+      }
+
+      // For project cost total, use section-based splitting to preserve structure
+      if (parsed.commandName === 'project cost total') {
+        const messages = this.buildSectionBasedMessages(stdout);
         for (const message of messages) {
           await this.postSlackMessage(client, channel, message, threadTs);
         }

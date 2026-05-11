@@ -148,6 +148,10 @@ class OutputFormatter {
       this.formatDetailLine('Participants', this.formatNumber(report.participantCount ?? 0)),
     ];
 
+    if (report.period?.label) {
+      lines.splice(2, 0, this.formatDetailLine('Period', this.escapeMrkdwn(report.period.label)));
+    }
+
     if (report.missingCostCount > 0) {
       lines.push(this.formatDetailLine('Missing cost', this.formatNumber(report.missingCostCount)));
     }
@@ -181,6 +185,58 @@ class OutputFormatter {
       lines.push('');
       lines.push('  Note: total cost is a minimum because some users are missing cost values.');
     }
+
+    if (Array.isArray(report.previous_years) && report.previous_years.length > 0) {
+      lines.push('');
+      lines.push('  Yearly breakdown:');
+      for (const yearReport of report.previous_years) {
+        const costStr = yearReport.total_cost !== undefined && yearReport.total_cost !== null 
+          ? `, ${this.formatNumber(yearReport.total_cost ?? 0)} kr` 
+          : '';
+        lines.push(`    - ${this.formatInlineCode(`${yearReport.year}: ${this.formatNumber(yearReport.total_hours ?? 0)} h${costStr}, ${this.formatNumber(yearReport.active_users ?? 0)} contributors`)}`);
+      }
+    }
+
+    return lines.join('\n');
+  }
+
+  formatProjectCostTotal(reports) {
+    if (!Array.isArray(reports) || reports.length === 0) {
+      return this.formatPlainLinesAsBullets('No projects found.');
+    }
+
+    const lines = [];
+    let totalHours = 0;
+    let totalCost = 0;
+    let totalParticipants = 0;
+
+    // Header line
+    const period = reports[0]?.period?.label || 'Unknown period';
+    lines.push(`• 📊 *All Projects* (${this.escapeMrkdwn(period)})`);
+    lines.push('');
+
+    // Individual projects
+    for (const report of reports) {
+      const projectName = this.escapeMrkdwn(report.projectName || 'Unknown project');
+      const projectKey = this.escapeMrkdwn(report.projectKey || 'unknown key');
+      const hours = this.formatNumber(report.totalHours ?? 0);
+      const cost = this.formatCurrency(report.totalCost ?? 0);
+      const participants = this.formatNumber(report.participantCount ?? 0);
+
+      lines.push(this.formatDetailLine(`${projectName} (${projectKey})`, `${hours} h, ${cost}, ${participants} contributors`));
+
+      totalHours += report.totalHours ?? 0;
+      totalCost += report.totalCost ?? 0;
+      totalParticipants += report.participantCount ?? 0;
+    }
+
+    // Summary section
+    lines.push('');
+    lines.push('  *Summary:*');
+    lines.push(this.formatDetailLine('Total Hours', `${this.formatNumber(totalHours)} h`));
+    lines.push(this.formatDetailLine('Total Cost', this.formatCurrency(totalCost)));
+    lines.push(this.formatDetailLine('Total Participants', this.formatNumber(totalParticipants)));
+    lines.push(this.formatDetailLine('Projects', this.formatNumber(reports.length)));
 
     return lines.join('\n');
   }
@@ -411,6 +467,10 @@ class OutputFormatter {
 
     if (commandName === 'project cost') {
       return this.formatProjectCost(parsedOutput);
+    }
+
+    if (commandName === 'project cost total') {
+      return this.formatProjectCostTotal(parsedOutput);
     }
 
     if (commandName === 'project team') {

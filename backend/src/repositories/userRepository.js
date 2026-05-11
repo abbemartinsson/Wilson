@@ -258,6 +258,20 @@ async function listUsersWithTimesheetReminders() {
   return data || [];
 }
 
+async function listUsersWithEmailAndCost() {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(selectUserColumns())
+    .not('email', 'is', null)
+    .order('name', { ascending: true });
+
+  if (error) {
+    throw error;
+  }
+
+  return (data || []).filter((user) => String(user.email || '').trim() !== '');
+}
+
 async function updateUserCostById(userId, cost) {
   const { data, error } = await supabase
     .from(TABLE)
@@ -318,6 +332,7 @@ module.exports = {
   updateTimesheetReminderSentAtByUserId,
   updateUserCostById,
   listUsersWithTimesheetReminders,
+  listUsersWithEmailAndCost,
   findRoleBySlackAccountId,
   DEFAULT_USER_ROLE,
 };

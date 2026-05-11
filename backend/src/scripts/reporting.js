@@ -1,8 +1,16 @@
-require('dotenv').config({ path: './src/config/.env' });
+const path = require('path');
+// Load .env relative to this script file to avoid depending on process.cwd()
+require('dotenv').config({ path: path.join(__dirname, '..', 'config', '.env') });
 
 const reportingService = require('../forecasting/reportingService');
 
 const command = process.argv[2];
+
+// Early validation: ensure Supabase config is available to avoid opaque failures
+if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
+  console.error('Supabase configuration is missing. Set SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY in environment or src/config/.env');
+  process.exit(1);
+}
 
 function parsePositiveInt(value, fallback) {
   if (value === undefined) {
@@ -59,13 +67,47 @@ async function main() {
 
     if (command === 'project-cost') {
       const projectInput = process.argv[3];
+      const yearInput = process.argv[4] ? String(process.argv[4]).trim() : null;
 
       if (!projectInput) {
-        console.error('Missing project key or name. Usage: npm run report:project-cost <PROJECT_KEY_OR_NAME>');
+        console.error('Missing project key or name. Usage: npm run report:project-cost <PROJECT_KEY_OR_NAME> [YEAR]');
         process.exit(1);
       }
 
-      const report = await reportingService.getProjectCost(projectInput);
+      const normalizedProjectInput = String(projectInput || '').trim().toLowerCase();
+      // Support special case: aggregate costs for all projects using 'total' keyword
+      if (normalizedProjectInput === 'total') {
+        try {
+          const projects = await reportingService.getAllProjects();
+          const results = [];
+          for (const p of projects) {
+            try {
+              const report = reportingService.getProjectCostWithYears
+                ? await reportingService.getProjectCostWithYears(p.projectKey, yearInput ? { year: yearInput } : {})
+                : await reportingService.getProjectCost(p.projectKey, yearInput ? { year: yearInput } : {});
+
+              if (report) {
+                results.push(report);
+              }
+            } catch (err) {
+              console.error(`Warning: failed to compute cost for project ${p.projectKey}: ${err && err.message}`);
+            }
+          }
+
+          console.log(JSON.stringify(results, null, 2));
+          process.exit(0);
+        } catch (err) {
+          console.error(`Fatal error aggregating project costs: ${err && err.message}`);
+          if (err && err.stack) {
+            console.error(err.stack);
+          }
+          process.exit(1);
+        }
+      }
+
+      const report = await reportingService.getProjectCostWithYears
+        ? await reportingService.getProjectCostWithYears(projectInput, yearInput ? { year: yearInput } : {})
+        : await reportingService.getProjectCost(projectInput, yearInput ? { year: yearInput } : {});
 
       if (!report) {
         console.error(`No project found matching: ${projectInput}`);
@@ -229,7 +271,7 @@ async function main() {
     console.error('  project-worklog-report <PROJECT_KEY_OR_NAME> <week|month>');
     console.error('  project-worklog-team-report <PROJECT_KEY_OR_NAME> <week|month>');
     console.error('  project-participants <PROJECT_KEY_OR_NAME>');
-    console.error('  project-cost <PROJECT_KEY_OR_NAME>');
+    console.error('  project-cost <PROJECT_KEY_OR_NAME> [YEAR]');
     console.error('  list-projects');
     console.error('  workload-forecast [MONTHS]');
     console.error('  historical-comparison [MONTH] [YEAR] [YEARS_BACK]');

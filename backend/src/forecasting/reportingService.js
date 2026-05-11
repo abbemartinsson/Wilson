@@ -23,14 +23,18 @@ async function getProjectInfo(projectKey) {
 	};
 }
 
-async function getProjectCost(projectKey) {
-	const report = await analyticsRepository.getProjectCostReport(projectKey);
+async function getProjectCost(projectKey, options = {}) {
+	const yearRange = getYearRangeInStockholm(options.year);
+	const report = await analyticsRepository.getProjectCostReport(projectKey, yearRange ? {
+		startDate: yearRange.startDateUtc,
+		endDate: yearRange.endDateUtc,
+	} : {});
 
 	if (!report) {
 		return null;
 	}
 
-	return {
+	const result = {
 		projectId: report.projectId,
 		projectKey: report.projectKey,
 		projectName: report.projectName,
@@ -55,11 +59,114 @@ async function getProjectCost(projectKey) {
 			totalHours: roundToTwoDecimals(user.totalHours),
 		})),
 		missingCostCount: report.missingCostCount,
+		period: yearRange ? {
+			timeZone: 'Europe/Stockholm',
+			startDate: yearRange.startDate,
+			endDate: yearRange.endDate,
+			label: String(yearRange.year),
+		} : undefined,
 	};
+
+	// If no year filter, include the previous_years from the report which already has costs
+	if (!yearRange && report.previous_years) {
+		result.previous_years = report.previous_years;
+	}
+
+	return result;
+}
+
+// If no year filter was provided, enrich with yearly breakdown
+async function getProjectCostWithYears(projectKey, options = {}) {
+	const base = await getProjectCost(projectKey, options);
+	if (!base) return null;
+	const yearRange = getYearRangeInStockholm(options.year);
+	if (!yearRange) {
+		await attachYearlyBreakdownToProjectCost(base, projectKey);
+	}
+	return base;
+}
+
+// Add yearly breakdown computed from same worklogs so sums match
+async function attachYearlyBreakdownToProjectCost(reportObj, projectKey) {
+	if (!reportObj || typeof reportObj !== 'object') return reportObj;
+
+	try {
+		const worklogs = await analyticsRepository.getAllWorklogsForForecast({ projectKey });
+		const years = Array.from(new Set(
+			worklogs
+				.filter((worklog) => worklog && worklog.started_at && worklog.user_id !== undefined && worklog.user_id !== null)
+				.map((worklog) => getDatePartsInTimeZone(new Date(worklog.started_at), 'Europe/Stockholm').year)
+		));
+
+		const previous_years = [];
+		let yearlySecondsTotal = 0;
+		let yearlyCostTotal = 0;
+		for (const year of years.sort((a, b) => b - a)) {
+			const yearRange = getYearRangeInStockholm(year);
+			const yearlyReport = await analyticsRepository.getProjectCostReport(projectKey, {
+				startDate: yearRange.startDateUtc,
+				endDate: yearRange.endDateUtc,
+			});
+
+			if (!yearlyReport) {
+				continue;
+			}
+
+			previous_years.push({
+				year,
+				total_hours: roundToTwoDecimals(yearlyReport.totalSeconds / 3600),
+				total_cost: roundToTwoDecimals(yearlyReport.totalCost),
+				active_users: yearlyReport.totalParticipants,
+			});
+
+			yearlySecondsTotal += yearlyReport.totalSeconds || 0;
+			yearlyCostTotal += yearlyReport.totalCost || 0;
+		}
+
+		const remainingSeconds = Math.max(0, (reportObj.totalSeconds || 0) - yearlySecondsTotal);
+		const remainingCost = Math.max(0, (reportObj.totalCost || 0) - yearlyCostTotal);
+		if (remainingSeconds > 0.5) {
+			previous_years.push({
+				year: 'Utan datum',
+				total_hours: roundToTwoDecimals(remainingSeconds / 3600),
+				total_cost: roundToTwoDecimals(remainingCost),
+				active_users: 0,
+			});
+		}
+
+		reportObj.previous_years = previous_years;
+	} catch (err) {
+		// non-fatal
+		console.warn('Failed to compute yearly breakdown for project cost:', err && err.message);
+	}
+
+	return reportObj;
 }
 
 function roundToTwoDecimals(value) {
 	return Math.round((value + Number.EPSILON) * 100) / 100;
+}
+
+function getYearRangeInStockholm(yearInput) {
+	if (yearInput === undefined || yearInput === null || String(yearInput).trim() === '') {
+		return null;
+	}
+
+	const year = Number.parseInt(yearInput, 10);
+	if (!Number.isInteger(year) || year < 1900 || year > 2100) {
+		throw new Error(`Invalid year: ${yearInput}`);
+	}
+
+	const startParts = { year, month: 1, day: 1 };
+	const endParts = { year, month: 12, day: 31 };
+
+	return {
+		year,
+		startDate: `${year}-01-01`,
+		endDate: `${year}-12-31`,
+		startDateUtc: zonedTimeToUtc(startParts, 0, 0, 0, 'Europe/Stockholm'),
+		endDateUtc: zonedTimeToUtc(endParts, 23, 59, 59, 'Europe/Stockholm'),
+	};
 }
 
 async function searchProjects(query) {
@@ -698,6 +805,7 @@ function getMonthRangeInStockholm(year, month) {
 module.exports = {
 	getProjectInfo,
 	getProjectCost,
+	getProjectCostWithYears,
 	searchProjects,
 	getAllProjects,
 	getProjectLastWeekHours,
