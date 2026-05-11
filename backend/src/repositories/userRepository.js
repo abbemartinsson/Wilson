@@ -13,6 +13,10 @@ function selectUserColumns() {
   return 'id, jira_account_id, name, email, cost, capacity_hours_per_week, slack_account_id, slack_dm_channel_id, timesheet_reminder_mode, last_timesheet_reminder_sent_at, created_at, updated_at';
 }
 
+function selectUserColumnsWithFortnoxTokens() {
+  return `${selectUserColumns()}, fortnox_access_token, fortnox_refresh_token`;
+}
+
 function getFirstName(name) {
   const normalizedName = String(name || '').trim().replace(/\s+/g, ' ');
   if (!normalizedName) {
@@ -50,6 +54,21 @@ async function findUserBySlackAccountId(slackAccountId) {
   const { data, error } = await supabase
     .from(TABLE)
     .select(selectUserColumns())
+    .eq('slack_account_id', slackAccountId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
+async function findUserBySlackAccountIdWithFortnoxTokens(slackAccountId) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(selectUserColumnsWithFortnoxTokens())
     .eq('slack_account_id', slackAccountId)
     .limit(1)
     .maybeSingle();
@@ -224,6 +243,34 @@ async function updateTimesheetReminderPreferencesBySlackAccountId(slackAccountId
   return data || null;
 }
 
+async function updateFortnoxTokensByUserId(userId, { fortnoxAccessToken, fortnoxRefreshToken }) {
+  const payload = {
+    updated_at: new Date().toISOString(),
+  };
+
+  if (fortnoxAccessToken !== undefined) {
+    payload.fortnox_access_token = fortnoxAccessToken;
+  }
+
+  if (fortnoxRefreshToken !== undefined) {
+    payload.fortnox_refresh_token = fortnoxRefreshToken;
+  }
+
+  const { data, error } = await supabase
+    .from(TABLE)
+    .update(payload)
+    .eq('id', userId)
+    .select(selectUserColumnsWithFortnoxTokens())
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
 async function updateTimesheetReminderSentAtByUserId(userId, sentAt = new Date().toISOString()) {
   const { data, error } = await supabase
     .from(TABLE)
@@ -323,6 +370,7 @@ async function findRoleBySlackAccountId(slackAccountId) {
 module.exports = {
   upsertUsers,
   findUserBySlackAccountId,
+  findUserBySlackAccountIdWithFortnoxTokens,
   findUserById,
   findUsersByFirstName,
   setSlackDmChannelIdBySlackAccountId,
@@ -335,4 +383,5 @@ module.exports = {
   listUsersWithEmailAndCost,
   findRoleBySlackAccountId,
   DEFAULT_USER_ROLE,
+  updateFortnoxTokensByUserId,
 };
