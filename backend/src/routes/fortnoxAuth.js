@@ -169,14 +169,22 @@ router.get('/auth/fortnox/callback', async (req, res) => {
       updated_at: now,
     };
 
+    console.log('Updating user', userId, 'with row:', { 
+      hasAccessToken: Boolean(encryptedAccess),
+      hasRefreshToken: Boolean(encryptedRefresh),
+      expiresAt,
+      accessTokenLength: encryptedAccess?.length,
+      refreshTokenLength: encryptedRefresh?.length
+    });
+
     const { error } = await supabase
       .from('USERS')
       .update(row)
       .eq('id', userId);
 
     if (error) {
-      console.error('Supabase upsert error:', error);
-      return res.status(500).send('Connected to Fortnox, but failed to save tokens.');
+      console.error('Supabase update error:', error);
+      return res.status(500).send(`Failed to save tokens: ${error.message}`);
     }
 
     return res.send('<html><body><h2>Fortnox connected successfully ✅</h2><p>You can close this window.</p></body></html>');
