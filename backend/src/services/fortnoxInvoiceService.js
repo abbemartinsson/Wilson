@@ -4,10 +4,10 @@ const { decrypt, encrypt } = require('../utils/crypto');
 
 const FORTNOX_TOKEN_URL = process.env.FORTNOX_TOKEN_URL || 'https://apps.fortnox.se/oauth-v1/token';
 const FORTNOX_API_BASE_URL = String(process.env.FORTNOX_API_BASE_URL || 'https://api.fortnox.se').trim().replace(/\/$/, '');
-const rawInvoiceEndpoint = String(process.env.FORTNOX_INVOICE_ENDPOINT || '/3/customerinvoices').trim();
+const rawInvoiceEndpoint = String(process.env.FORTNOX_INVOICE_ENDPOINT || '/3/invoices').trim();
 const FORTNOX_INVOICE_ENDPOINT = rawInvoiceEndpoint
   ? (rawInvoiceEndpoint.startsWith('/') ? rawInvoiceEndpoint : `/${rawInvoiceEndpoint}`)
-  : '/3/customerinvoices';
+  : '/3/invoices';
 const FORTNOX_INVOICE_PAGE_SIZE = Number.parseInt(process.env.FORTNOX_INVOICE_PAGE_SIZE, 10) || 50;
 const FORTNOX_INVOICE_MAX_PAGES = Number.parseInt(process.env.FORTNOX_INVOICE_MAX_PAGES, 10) || 5;
 
@@ -126,6 +126,26 @@ function summarizeInvoice(invoice) {
   };
 }
 
+function extractFortnoxErrorMessage(error) {
+  const fortnoxError = error?.response?.data?.ErrorInformation || error?.response?.data?.errorInformation || null;
+  if (fortnoxError) {
+    const parts = [fortnoxError.message, fortnoxError.code ? `code=${fortnoxError.code}` : null].filter(Boolean);
+    if (parts.length > 0) {
+      return parts.join(' ');
+    }
+  }
+
+  if (error?.response?.data) {
+    try {
+      return JSON.stringify(error.response.data);
+    } catch (_serializationError) {
+      return String(error.response.data);
+    }
+  }
+
+  return error?.message || 'Unknown Fortnox error';
+}
+
 async function refreshFortnoxAccessToken(refreshToken) {
   const response = await axios.post(
     FORTNOX_TOKEN_URL,
@@ -164,6 +184,7 @@ async function fetchFortnoxInvoicePages(accessToken) {
     const response = await axios.get(`${FORTNOX_API_BASE_URL}${FORTNOX_INVOICE_ENDPOINT}`, {
       headers: {
         Authorization: `Bearer ${accessToken}`,
+        Accept: 'application/json',
       },
       params: {
         page,
@@ -200,6 +221,7 @@ async function fetchFortnoxInvoicesWithRetry({ accessToken, refreshToken, userId
   } catch (error) {
     const statusCode = error?.response?.status;
     if (!refreshToken || (statusCode !== 401 && statusCode !== 403)) {
+      error.message = `Fortnox invoice request failed (${statusCode || 'no status'}): ${extractFortnoxErrorMessage(error)}`;
       throw error;
     }
 
