@@ -144,16 +144,20 @@ router.get('/auth/fortnox/callback', async (req, res) => {
     const now = new Date().toISOString();
     const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
 
-    // Find user by slack_user_id
+    // Find user by slack_account_id
+    console.log('Looking for user with slack_account_id:', state);
     const { data: users, error: selectError } = await supabase
       .from('USERS')
       .select('id')
-      .eq('slack_user_id', state)
+      .eq('slack_account_id', state)
       .limit(1);
+
+    console.log('Query result:', { selectError, users, count: users?.length });
 
     if (selectError || !users || users.length === 0) {
       console.error('User lookup error:', selectError);
-      return res.status(500).send('User not found for this Slack ID');
+      console.error('State value was:', state);
+      return res.status(500).send(`User not found for slack_account_id: ${state}`);
     }
 
     const userId = users[0].id;
