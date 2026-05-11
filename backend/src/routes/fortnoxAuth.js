@@ -139,10 +139,7 @@ router.get('/auth/fortnox/callback', async (req, res) => {
       console.error('Encryption error:', err.message || err);
       return res.status(500).send('Server encryption configuration missing or invalid');
     }
-    const expiresIn = Number.parseInt(tokenData.expires_in || tokenData.expiresIn || 0, 10) || 0;
-
     const now = new Date().toISOString();
-    const expiresAt = expiresIn ? new Date(Date.now() + expiresIn * 1000).toISOString() : null;
 
     // Find user by slack_account_id
     console.log('Looking for user with slack_account_id:', state);
@@ -165,14 +162,12 @@ router.get('/auth/fortnox/callback', async (req, res) => {
     const row = {
       fortnox_access_token: encryptedAccess,
       fortnox_refresh_token: encryptedRefresh,
-      expires_at: expiresAt,
       updated_at: now,
     };
 
-    console.log('Updating user', userId, 'with row:', { 
+    console.log('Updating user', userId, 'with row:', {
       hasAccessToken: Boolean(encryptedAccess),
       hasRefreshToken: Boolean(encryptedRefresh),
-      expiresAt,
       accessTokenLength: encryptedAccess?.length,
       refreshTokenLength: encryptedRefresh?.length
     });
