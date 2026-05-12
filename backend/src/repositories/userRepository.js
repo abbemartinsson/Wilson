@@ -95,6 +95,21 @@ async function findUserById(userId) {
   return data || null;
 }
 
+async function findUserByIdWithFortnoxTokens(userId) {
+  const { data, error } = await supabase
+    .from(TABLE)
+    .select(selectUserColumnsWithFortnoxTokens())
+    .eq('id', userId)
+    .limit(1)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
+  }
+
+  return data || null;
+}
+
 async function findUsersByFirstName(firstName) {
   const normalizedFirstName = String(firstName || '').trim().toLowerCase();
 
@@ -372,6 +387,7 @@ module.exports = {
   findUserBySlackAccountId,
   findUserBySlackAccountIdWithFortnoxTokens,
   findUserById,
+  findUserByIdWithFortnoxTokens,
   findUsersByFirstName,
   setSlackDmChannelIdBySlackAccountId,
   upsertSlackUser,

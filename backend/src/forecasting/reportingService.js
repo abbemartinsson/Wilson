@@ -1,6 +1,7 @@
 const analyticsRepository = require('../repositories/analyticsRepository');
 const analyticsService = require('./analyticsService');
 const forecastService = require('./forecastSerive');
+const fortnoxInvoiceService = require('../services/fortnoxInvoiceService');
 
 async function getProjectInfo(projectKey) {
 	const report = await analyticsRepository.getProjectInfo(projectKey);
@@ -70,6 +71,41 @@ async function getProjectCost(projectKey, options = {}) {
 	// If no year filter, include the previous_years from the report which already has costs
 	if (!costRange && report.previous_years) {
 		result.previous_years = report.previous_years;
+	}
+
+	// Fetch Fortnox invoice total if userId is provided
+	if (options.userId) {
+		try {
+			const invoiceResult = await fortnoxInvoiceService.getProjectInvoicesTotalByProjectKey({
+				userId: options.userId,
+				projectKey: projectKey,
+				startDate: costRange?.startDateUtc,
+				endDate: costRange?.endDateUtc,
+			});
+
+			if (invoiceResult.ok && invoiceResult.matchedCount > 0) {
+				const totalInvoiceNet = invoiceResult.totalInvoiceNet;
+				const grossMarginAmount = roundToTwoDecimals(totalInvoiceNet - result.totalCost);
+				const grossMarginPercent = totalInvoiceNet > 0 
+					? roundToTwoDecimals((grossMarginAmount / totalInvoiceNet) * 100)
+					: null;
+
+				result.invoiceTotal = roundToTwoDecimals(totalInvoiceNet);
+				result.grossMarginAmount = grossMarginAmount;
+				result.grossMarginPercent = grossMarginPercent;
+				result.invoiceMatchedCount = invoiceResult.matchedCount;
+			}
+		} catch (error) {
+			// Non-fatal: if Fortnox lookup fails, continue without margin calculation
+			// Log for debugging but don't throw
+			if (error.code !== 'FORTNOX_NOT_CONNECTED' && error.code !== 'USER_NOT_FOUND') {
+				console.warn('Failed to fetch Fortnox invoice total for gross margin:', {
+					projectKey,
+					userId: options.userId,
+					error: error.message,
+				});
+			}
+		}
 	}
 
 	return result;

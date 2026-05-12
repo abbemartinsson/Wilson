@@ -5,6 +5,7 @@ const userRepository = require('../repositories/userRepository');
 const issueRepository = require('../repositories/issueRepository');
 const worklogRepository = require('../repositories/worklogRepository');
 const tempoClient = require('../clients/tempoClient');
+const reportingService = require('../forecasting/reportingService');
 
 const {
   COMMAND_PREFIX,
@@ -1387,6 +1388,43 @@ class SlackCommandController {
             return true;
           }
 
+          // Enrich with Fortnox invoice data and gross margin if userId is available
+          try {
+            const user = await userRepository.findUserBySlackAccountId(slackUserId);
+            if (user) {
+              for (const report of reportData) {
+                if (report.projectKey) {
+                  try {
+                    const projectCostWithMargin = await reportingService.getProjectCost(report.projectKey, {
+                      userId: user.id,
+                      year: report.period?.startDate ? new Date(report.period.startDate).getUTCFullYear() : undefined,
+                      month: report.period?.startDate ? new Date(report.period.startDate).getUTCMonth() + 1 : undefined,
+                    });
+
+                    if (projectCostWithMargin && projectCostWithMargin.invoiceTotal !== undefined) {
+                      report.invoiceTotal = projectCostWithMargin.invoiceTotal;
+                      report.grossMarginAmount = projectCostWithMargin.grossMarginAmount;
+                      report.grossMarginPercent = projectCostWithMargin.grossMarginPercent;
+                      report.invoiceMatchedCount = projectCostWithMargin.invoiceMatchedCount;
+                    }
+                  } catch (projectMarginError) {
+                    // Non-fatal: if margin calculation fails for one project, continue with others
+                    logger.debug('Failed to enrich project cost total with margin for one project', {
+                      projectKey: report.projectKey,
+                      error: projectMarginError.message,
+                    });
+                  }
+                }
+              }
+            }
+          } catch (marginError) {
+            // Non-fatal: if margin calculation fails, continue with regular export
+            logger.warn('Failed to enrich project cost total with Fortnox data', {
+              slackUserId,
+              error: marginError.message,
+            });
+          }
+
           const excelBuffer = await this.excelReportService.buildProjectCostTotalWorkbook(reportData);
           const periodLabel = reportData[0]?.period?.label ? `-${reportData[0].period.label}` : '';
           const filename = `project-cost-total${periodLabel}-${Date.now()}.xlsx`;
@@ -1437,6 +1475,32 @@ class SlackCommandController {
               threadTs
             );
             return true;
+          }
+
+          // Enrich with Fortnox invoice data and gross margin if userId is available
+          try {
+            const user = await userRepository.findUserBySlackAccountId(slackUserId);
+            if (user && reportData.projectKey) {
+              const projectCostWithMargin = await reportingService.getProjectCost(reportData.projectKey, {
+                userId: user.id,
+                year: reportData.period?.startDate ? new Date(reportData.period.startDate).getUTCFullYear() : undefined,
+                month: reportData.period?.startDate ? new Date(reportData.period.startDate).getUTCMonth() + 1 : undefined,
+              });
+
+              if (projectCostWithMargin && projectCostWithMargin.invoiceTotal !== undefined) {
+                reportData.invoiceTotal = projectCostWithMargin.invoiceTotal;
+                reportData.grossMarginAmount = projectCostWithMargin.grossMarginAmount;
+                reportData.grossMarginPercent = projectCostWithMargin.grossMarginPercent;
+                reportData.invoiceMatchedCount = projectCostWithMargin.invoiceMatchedCount;
+              }
+            }
+          } catch (marginError) {
+            // Non-fatal: if margin calculation fails, continue with regular export
+            logger.warn('Failed to enrich project cost with Fortnox data', {
+              slackUserId,
+              projectKey: reportData.projectKey,
+              error: marginError.message,
+            });
           }
 
           const excelBuffer = await this.excelReportService.buildProjectCostWorkbook(reportData);

@@ -64,21 +64,39 @@ async function buildProjectCostTotalWorkbook(reports) {
   const totalCost = reportList.reduce((sum, report) => sum + Number(report?.totalCost || 0), 0);
   const totalParticipants = reportList.reduce((sum, report) => sum + Number(report?.participantCount || 0), 0);
   const totalMissingCost = reportList.reduce((sum, report) => sum + Number(report?.missingCostCount || 0), 0);
+  const totalInvoice = reportList.reduce((sum, report) => sum + Number(report?.invoiceTotal || 0), 0);
+  const totalGrossMargin = reportList.reduce((sum, report) => sum + Number(report?.grossMarginAmount || 0), 0);
   const periodLabel = formatText(reportList[0]?.period?.label, 'All projects');
 
-  summarySheet.addRows([
+  const summaryRows = [
     { metric: 'Period', value: periodLabel },
     { metric: 'Projects', value: reportList.length },
     { metric: 'Total hours', value: totalHours },
     { metric: 'Total cost', value: totalCost },
     { metric: 'Total participants', value: totalParticipants },
     { metric: 'Missing cost users', value: totalMissingCost },
-  ]);
+  ];
+
+  // Add gross margin totals if any invoices matched
+  if (totalInvoice > 0) {
+    summaryRows.push({ metric: 'Total invoice', value: totalInvoice });
+    summaryRows.push({ metric: 'Total gross margin', value: totalGrossMargin });
+  }
+
+  summarySheet.addRows(summaryRows);
 
   applyNumberFormat(summarySheet.getCell('B4'));
   applyCurrencyFormat(summarySheet.getCell('B5'));
   applyNumberFormat(summarySheet.getCell('B6'));
   applyNumberFormat(summarySheet.getCell('B7'));
+
+  // Apply currency format to invoice and margin totals if present
+  let cellRowIndex = 8;
+  if (totalInvoice > 0) {
+    applyCurrencyFormat(summarySheet.getCell(`B${cellRowIndex}`));
+    cellRowIndex++;
+    applyCurrencyFormat(summarySheet.getCell(`B${cellRowIndex}`));
+  }
   summarySheet.getColumn(1).alignment = { vertical: 'middle' };
   summarySheet.getColumn(2).alignment = { vertical: 'middle' };
 
@@ -90,6 +108,9 @@ async function buildProjectCostTotalWorkbook(reports) {
     { header: 'Total cost', key: 'totalCost', width: 14 },
     { header: 'Participants', key: 'participantCount', width: 14 },
     { header: 'Missing cost users', key: 'missingCostCount', width: 18 },
+    { header: 'Invoice total', key: 'invoiceTotal', width: 14 },
+    { header: 'Gross margin', key: 'grossMarginAmount', width: 14 },
+    { header: 'Margin %', key: 'grossMarginPercent', width: 12 },
     { header: 'Period', key: 'period', width: 18 },
   ];
   projectsSheet.getRow(1).height = 20;
@@ -104,10 +125,15 @@ async function buildProjectCostTotalWorkbook(reports) {
       totalCost: formatNumber(report?.totalCost),
       participantCount: formatNumber(report?.participantCount),
       missingCostCount: formatNumber(report?.missingCostCount),
+      invoiceTotal: formatNumber(report?.invoiceTotal),
+      grossMarginAmount: formatNumber(report?.grossMarginAmount),
+      grossMarginPercent: formatNumber(report?.grossMarginPercent),
       period: formatText(report?.period?.label, periodLabel),
     });
 
     applyCurrencyFormat(row.getCell('totalCost'));
+    applyCurrencyFormat(row.getCell('invoiceTotal'));
+    applyCurrencyFormat(row.getCell('grossMarginAmount'));
   }
 
   const reportHasYearBreakdown = reportList.some((report) => Array.isArray(report?.previous_years) && report.previous_years.length > 0);
@@ -166,7 +192,7 @@ async function buildProjectCostWorkbook(report) {
   summarySheet.getRow(1).height = 20;
   applyHeaderStyle(summarySheet.getRow(1));
 
-  summarySheet.addRows([
+  const summaryRows = [
     { metric: 'Project', value: projectName },
     { metric: 'Project key', value: projectKey },
     { metric: 'Period', value: periodLabel },
@@ -174,12 +200,44 @@ async function buildProjectCostWorkbook(report) {
     { metric: 'Total cost', value: formatNumber(report?.totalCost) },
     { metric: 'Participants', value: formatNumber(report?.participantCount) },
     { metric: 'Missing cost users', value: formatNumber(report?.missingCostCount) },
-  ]);
+  ];
+
+  // Add gross margin rows if invoice data is available
+  if (report?.invoiceTotal !== undefined) {
+    summaryRows.push({ metric: 'Invoice total (net)', value: formatNumber(report.invoiceTotal) });
+  }
+  if (report?.grossMarginAmount !== undefined) {
+    summaryRows.push({ metric: 'Gross margin', value: formatNumber(report.grossMarginAmount) });
+  }
+  if (report?.grossMarginPercent !== undefined) {
+    summaryRows.push({ metric: 'Gross margin %', value: formatNumber(report.grossMarginPercent) });
+  }
+  if (report?.invoiceMatchedCount !== undefined) {
+    summaryRows.push({ metric: 'Invoices matched', value: formatNumber(report.invoiceMatchedCount) });
+  }
+
+  summarySheet.addRows(summaryRows);
 
   applyNumberFormat(summarySheet.getCell('B5'));
   applyCurrencyFormat(summarySheet.getCell('B6'));
   applyNumberFormat(summarySheet.getCell('B7'));
   applyNumberFormat(summarySheet.getCell('B8'));
+  
+  // Apply currency format to invoice total, gross margin amount
+  let cellIndex = 9;
+  if (report?.invoiceTotal !== undefined) {
+    applyCurrencyFormat(summarySheet.getCell(`B${cellIndex}`));
+    cellIndex++;
+  }
+  if (report?.grossMarginAmount !== undefined) {
+    applyCurrencyFormat(summarySheet.getCell(`B${cellIndex}`));
+    cellIndex++;
+  }
+  if (report?.grossMarginPercent !== undefined) {
+    applyNumberFormat(summarySheet.getCell(`B${cellIndex}`));
+    cellIndex++;
+  }
+  
   summarySheet.getColumn(1).alignment = { vertical: 'middle' };
   summarySheet.getColumn(2).alignment = { vertical: 'middle' };
 

@@ -152,6 +152,18 @@ class OutputFormatter {
       lines.splice(2, 0, this.formatDetailLine('Period', this.escapeMrkdwn(report.period.label)));
     }
 
+    // Add gross margin information if invoice data is available
+    if (report.invoiceTotal !== undefined) {
+      lines.push(this.formatDetailLine('Invoice total', this.formatCurrency(report.invoiceTotal)));
+    }
+    if (report.grossMarginAmount !== undefined) {
+      lines.push(this.formatDetailLine('Gross margin', this.formatCurrency(report.grossMarginAmount)));
+    }
+    if (report.grossMarginPercent !== undefined) {
+      const percentStr = this.formatNumber(report.grossMarginPercent);
+      lines.push(this.formatDetailLine('Margin %', `${percentStr}%`));
+    }
+
     if (report.missingCostCount > 0) {
       lines.push(this.formatDetailLine('Missing cost', this.formatNumber(report.missingCostCount)));
     }

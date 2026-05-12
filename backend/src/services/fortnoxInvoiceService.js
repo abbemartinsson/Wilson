@@ -421,6 +421,80 @@ async function testFortnoxInvoiceLookup({ slackUserId, projectKey, logger = cons
     };
 }
 
+async function getProjectInvoicesTotalByProjectKey({ userId, projectKey, startDate, endDate, logger = console }) {
+    const normalizedProjectKey = normalizeProjectKey(projectKey);
+    if (!userId) {
+        const error = new Error('User id is required');
+        error.code = 'MISSING_USER_ID';
+        throw error;
+    }
+
+    if (!normalizedProjectKey) {
+        const error = new Error('Project key is required');
+        error.code = 'MISSING_PROJECT_KEY';
+        throw error;
+    }
+
+    const user = await userRepository.findUserByIdWithFortnoxTokens(userId);
+    if (!user) {
+        const error = new Error('Could not find user for Fortnox lookup');
+        error.code = 'USER_NOT_FOUND';
+        throw error;
+    }
+
+    if (!user.fortnox_access_token || !user.fortnox_refresh_token) {
+        const error = new Error('Fortnox is not connected for this user');
+        error.code = 'FORTNOX_NOT_CONNECTED';
+        throw error;
+    }
+
+    let accessToken;
+    let refreshToken;
+    try {
+        accessToken = decrypt(user.fortnox_access_token);
+        refreshToken = decrypt(user.fortnox_refresh_token);
+    } catch (error) {
+        logger.error('Failed to decrypt Fortnox tokens', {
+            userId: user.id,
+            error: error.message,
+        });
+        const decryptError = new Error('Fortnox tokens could not be decrypted');
+        decryptError.code = 'FORTNOX_TOKEN_DECRYPT_FAILED';
+        throw decryptError;
+    }
+
+    const lookup = await fetchFortnoxInvoicesWithRetry({
+        accessToken,
+        refreshToken,
+        userId: user.id,
+    });
+
+    const matchedInvoices = lookup.invoices.filter((invoice) => isProjectMatch(invoice, normalizedProjectKey));
+
+    // Calculate total invoice amount (net, excluding VAT) from all matched invoices.
+    // Prefer explicit net fields, fall back to computing from gross minus VAT or use gross if nothing else available.
+    const totalInvoiceNet = matchedInvoices.reduce((sum, invoice) => {
+        const net = getInvoiceNetAmount(invoice);
+        if (net !== null && !Number.isNaN(Number(net))) {
+            return sum + Number(net);
+        }
+
+        const invoiceTotal = invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? 0;
+        const amount = Number(invoiceTotal) || 0;
+        return sum + amount;
+    }, 0);
+
+    return {
+        ok: true,
+        userId: user.id,
+        projectKey: normalizedProjectKey,
+        matchedCount: matchedInvoices.length,
+        totalInvoiceNet: totalInvoiceNet,
+        refreshedToken: Boolean(lookup.refreshedToken),
+    };
+}
+
 module.exports = {
     testFortnoxInvoiceLookup,
+    getProjectInvoicesTotalByProjectKey,
 };
