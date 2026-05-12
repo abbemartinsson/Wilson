@@ -65,7 +65,10 @@ async function buildProjectCostTotalWorkbook(reports) {
   const totalParticipants = reportList.reduce((sum, report) => sum + Number(report?.participantCount || 0), 0);
   const totalMissingCost = reportList.reduce((sum, report) => sum + Number(report?.missingCostCount || 0), 0);
   const totalInvoice = reportList.reduce((sum, report) => sum + Number(report?.invoiceTotal || 0), 0);
-  const totalGrossMargin = reportList.reduce((sum, report) => sum + Number(report?.grossMarginAmount || 0), 0);
+  const totalGrossMargin = totalInvoice > 0 ? Number((totalInvoice - totalCost).toFixed(2)) : null;
+  const totalGrossMarginPercent = totalInvoice > 0 && totalGrossMargin !== null
+    ? Number(((totalGrossMargin / totalInvoice) * 100).toFixed(2))
+    : null;
   const periodLabel = formatText(reportList[0]?.period?.label, 'All projects');
 
   const summaryRows = [
@@ -81,6 +84,7 @@ async function buildProjectCostTotalWorkbook(reports) {
   if (totalInvoice > 0) {
     summaryRows.push({ metric: 'Total invoice (SEK)', value: totalInvoice });
     summaryRows.push({ metric: 'Total gross margin (SEK)', value: totalGrossMargin });
+    summaryRows.push({ metric: 'Gross margin %', value: totalGrossMarginPercent });
   }
 
   // Check if any conversions were done
@@ -91,18 +95,16 @@ async function buildProjectCostTotalWorkbook(reports) {
 
   summarySheet.addRows(summaryRows);
 
-  applyNumberFormat(summarySheet.getCell('B4'));
-  applyCurrencyFormat(summarySheet.getCell('B5'));
-  applyNumberFormat(summarySheet.getCell('B6'));
-  applyNumberFormat(summarySheet.getCell('B7'));
-
-  // Apply currency format to invoice and margin totals if present
-  let cellRowIndex = 8;
-  if (totalInvoice > 0) {
-    applyCurrencyFormat(summarySheet.getCell(`B${cellRowIndex}`));
-    cellRowIndex++;
-    applyCurrencyFormat(summarySheet.getCell(`B${cellRowIndex}`));
-  }
+  summaryRows.forEach((row, index) => {
+    const cell = summarySheet.getCell(`B${index + 2}`);
+    if (row.metric === 'Total cost' || row.metric === 'Total invoice (SEK)' || row.metric === 'Total gross margin (SEK)') {
+      applyCurrencyFormat(cell);
+    } else if (row.metric === 'Gross margin %') {
+      applyNumberFormat(cell);
+    } else if (row.metric === 'Projects' || row.metric === 'Total hours' || row.metric === 'Total participants' || row.metric === 'Missing cost users') {
+      applyNumberFormat(cell);
+    }
+  });
   summarySheet.getColumn(1).alignment = { vertical: 'middle' };
   summarySheet.getColumn(2).alignment = { vertical: 'middle' };
 
@@ -221,7 +223,7 @@ async function buildProjectCostWorkbook(report) {
   if (report?.invoiceMatchedCount !== undefined) {
     summaryRows.push({ metric: 'Invoices matched', value: formatNumber(report.invoiceMatchedCount) });
   }
-  
+
   // Add currency conversion note if applicable
   if (report?.invoiceCurrencyConversionApplied === true && Array.isArray(report?.invoiceCurrencyConversions) && report.invoiceCurrencyConversions.length > 0) {
     summaryRows.push({ metric: 'Currency conversions', value: `${report.invoiceCurrencyConversions.length} invoices converted to SEK` });

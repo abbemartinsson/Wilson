@@ -86,7 +86,7 @@ async function getProjectCost(projectKey, options = {}) {
 			if (invoiceResult.ok && invoiceResult.matchedCount > 0) {
 				const totalInvoiceNetSEK = invoiceResult.totalInvoiceNetSEK;
 				const grossMarginAmount = roundToTwoDecimals(totalInvoiceNetSEK - result.totalCost);
-				const grossMarginPercent = totalInvoiceNetSEK > 0 
+				const grossMarginPercent = totalInvoiceNetSEK > 0
 					? roundToTwoDecimals((grossMarginAmount / totalInvoiceNetSEK) * 100)
 					: null;
 
@@ -94,7 +94,7 @@ async function getProjectCost(projectKey, options = {}) {
 				result.grossMarginAmount = grossMarginAmount;
 				result.grossMarginPercent = grossMarginPercent;
 				result.invoiceMatchedCount = invoiceResult.matchedCount;
-				
+
 				// Store currency conversion details for logging/transparency
 				if (invoiceResult.currencyConversionApplied) {
 					result.invoiceCurrencyConversionApplied = true;
