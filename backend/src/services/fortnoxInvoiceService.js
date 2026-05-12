@@ -8,8 +8,8 @@ const rawInvoiceEndpoint = String(process.env.FORTNOX_INVOICE_ENDPOINT || '/3/in
 const FORTNOX_INVOICE_ENDPOINT = rawInvoiceEndpoint
     ? (rawInvoiceEndpoint.startsWith('/') ? rawInvoiceEndpoint : `/${rawInvoiceEndpoint}`)
     : '/3/invoices';
-const FORTNOX_INVOICE_PAGE_SIZE = Number.parseInt(process.env.FORTNOX_INVOICE_PAGE_SIZE, 10) || 50;
-const FORTNOX_INVOICE_MAX_PAGES = Number.parseInt(process.env.FORTNOX_INVOICE_MAX_PAGES, 10) || 5;
+const FORTNOX_INVOICE_PAGE_SIZE = Number.parseInt(process.env.FORTNOX_INVOICE_PAGE_SIZE, 10) || 999;
+const FORTNOX_INVOICE_MAX_PAGES = Number.parseInt(process.env.FORTNOX_INVOICE_MAX_PAGES, 10) || 999;
 
 function normalizeProjectKey(value) {
     return String(value || '').trim().toUpperCase();
