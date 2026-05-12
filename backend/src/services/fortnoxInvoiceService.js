@@ -318,6 +318,13 @@ async function testFortnoxInvoiceLookup({ slackUserId, projectKey, logger = cons
     const matchedInvoices = lookup.invoices.filter((invoice) => isProjectMatch(invoice, normalizedProjectKey));
     const summaries = matchedInvoices.slice(0, 5).map((invoice) => summarizeInvoice(invoice));
 
+    // Calculate total cost from all matched invoices
+    const totalCost = matchedInvoices.reduce((sum, invoice) => {
+        const invoiceTotal = invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? 0;
+        const amount = Number(invoiceTotal) || 0;
+        return sum + amount;
+    }, 0);
+
     return {
         ok: true,
         slackUserId,
@@ -330,6 +337,7 @@ async function testFortnoxInvoiceLookup({ slackUserId, projectKey, logger = cons
         invoiceEndpoint: `${FORTNOX_API_BASE_URL}${FORTNOX_INVOICE_ENDPOINT}`,
         refreshedToken: Boolean(lookup.refreshedToken),
         matchedCount: matchedInvoices.length,
+        totalCost: totalCost,
         firstMatch: summaries[0] || null,
         matchedInvoices: summaries,
     };
