@@ -139,12 +139,84 @@ function summarizeInvoice(invoice) {
     return {
         documentNumber: invoice?.DocumentNumber ?? invoice?.InvoiceNumber ?? invoice?.Number ?? invoice?.CustomerInvoiceNumber ?? null,
         invoiceDate: invoice?.InvoiceDate ?? invoice?.Date ?? invoice?.Created ?? invoice?.DueDate ?? null,
-        total: invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? null,
+        // `total` will prefer a net amount where available (excl. VAT). Falls back to gross.
+        total: getInvoiceNetAmount(invoice) ?? invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? null,
         currency: invoice?.Currency ?? invoice?.currency ?? null,
         status: invoice?.Status ?? invoice?.State ?? invoice?.status ?? null,
         projectField: getInvoiceProjectField(invoice),
         customerName: invoice?.CustomerName ?? invoice?.Customer?.Name ?? invoice?.Customer?.CustomerName ?? null,
     };
+}
+
+function getInvoiceNetAmount(invoice) {
+    if (!invoice) return null;
+
+    const candidates = [
+        invoice?.TotalExcludingVat,
+        invoice?.totalExcludingVat,
+        invoice?.TotalExlVat,
+        invoice?.totalExlVat,
+        invoice?.Net,
+        invoice?.net,
+        invoice?.AmountExcludingVat,
+        invoice?.amountExcludingVat,
+        invoice?.TotalBeforeVat,
+        invoice?.totalBeforeVat,
+        invoice?.TotalExcludingTax,
+        invoice?.totalExcludingTax,
+    ];
+
+    for (const c of candidates) {
+        if (c !== undefined && c !== null && String(c).trim() !== '') {
+            const n = Number(c);
+            if (!Number.isNaN(n)) return n;
+        }
+    }
+
+    // Try to compute from gross minus VAT amount
+    const gross = Number(invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? 0) || 0;
+
+    // VAT amount candidates
+    const vatCandidates = [
+        invoice?.VATAmount,
+        invoice?.VatAmount,
+        invoice?.TotalVAT,
+        invoice?.TotalVat,
+        invoice?.VAT,
+        invoice?.Vat,
+        invoice?.Tax,
+        invoice?.tax,
+    ];
+
+    for (const v of vatCandidates) {
+        if (v !== undefined && v !== null && String(v).trim() !== '') {
+            const vat = Number(v);
+            if (!Number.isNaN(vat)) {
+                return gross - vat;
+            }
+        }
+    }
+
+    // Try VAT percent fields to infer net
+    const vatPercentCandidates = [
+        invoice?.VATPercent,
+        invoice?.VatPercent,
+        invoice?.VATRate,
+        invoice?.VatRate,
+        invoice?.TaxPercent,
+        invoice?.taxPercent,
+    ];
+
+    for (const p of vatPercentCandidates) {
+        if (p !== undefined && p !== null && String(p).trim() !== '') {
+            const percent = Number(p);
+            if (!Number.isNaN(percent) && percent !== 0) {
+                return gross / (1 + percent / 100);
+            }
+        }
+    }
+
+    return null;
 }
 
 function extractFortnoxErrorMessage(error) {
@@ -318,8 +390,14 @@ async function testFortnoxInvoiceLookup({ slackUserId, projectKey, logger = cons
     const matchedInvoices = lookup.invoices.filter((invoice) => isProjectMatch(invoice, normalizedProjectKey));
     const summaries = matchedInvoices.slice(0, 5).map((invoice) => summarizeInvoice(invoice));
 
-    // Calculate total cost from all matched invoices
+    // Calculate total cost (net) from all matched invoices. Prefer explicit net fields,
+    // fall back to computing from gross minus VAT or use gross if nothing else available.
     const totalCost = matchedInvoices.reduce((sum, invoice) => {
+        const net = getInvoiceNetAmount(invoice);
+        if (net !== null && !Number.isNaN(Number(net))) {
+            return sum + Number(net);
+        }
+
         const invoiceTotal = invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? 0;
         const amount = Number(invoiceTotal) || 0;
         return sum + amount;
