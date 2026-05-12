@@ -8,7 +8,7 @@ const rawInvoiceEndpoint = String(process.env.FORTNOX_INVOICE_ENDPOINT || '/3/in
 const FORTNOX_INVOICE_ENDPOINT = rawInvoiceEndpoint
     ? (rawInvoiceEndpoint.startsWith('/') ? rawInvoiceEndpoint : `/${rawInvoiceEndpoint}`)
     : '/3/invoices';
-const FORTNOX_INVOICE_PAGE_SIZE = Number.parseInt(process.env.FORTNOX_INVOICE_PAGE_SIZE, 10) || 999;
+const FORTNOX_INVOICE_PAGE_SIZE = Number.parseInt(process.env.FORTNOX_INVOICE_PAGE_SIZE, 10) || 500;
 const FORTNOX_INVOICE_MAX_PAGES = Number.parseInt(process.env.FORTNOX_INVOICE_MAX_PAGES, 10) || 999;
 
 function normalizeProjectKey(value) {
@@ -201,7 +201,7 @@ async function fetchFortnoxInvoicePages(accessToken) {
     let pagesFetched = 0;
     let page = 1;
 
-    while (page <= FORTNOX_INVOICE_MAX_PAGES) {
+    while (true) {
         const response = await axios.get(`${FORTNOX_API_BASE_URL}${FORTNOX_INVOICE_ENDPOINT}`, {
             headers: {
                 Authorization: `Bearer ${accessToken}`,
@@ -219,10 +219,13 @@ async function fetchFortnoxInvoicePages(accessToken) {
 
         const meta = getResponseMeta(response.data);
         const totalPages = getTotalPages(meta);
+
+        // Stop if we got fewer items than the page size (last page)
         if (items.length < FORTNOX_INVOICE_PAGE_SIZE) {
             break;
         }
 
+        // Stop if we've reached the total number of pages
         if (totalPages && page >= totalPages) {
             break;
         }
