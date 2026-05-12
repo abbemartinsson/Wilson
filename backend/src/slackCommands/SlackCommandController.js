@@ -727,6 +727,7 @@ class SlackCommandController {
       result.userName ? `User: ${result.userName}` : null,
       `Checked ${result.invoicesChecked} ${invoiceLabel} across ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'}`,
       `Matched ${result.matchedCount} ${matchedLabel} where the invoice project field matched ${projectNumber}`,
+      result.totalCost ? `*Total cost: ${result.totalCost.toLocaleString('sv-SE')} ${result.firstMatch?.currency || 'SEK'}*` : null,
     ].filter(Boolean);
 
     if (result.refreshedToken) {
