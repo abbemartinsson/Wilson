@@ -1489,21 +1489,11 @@ class SlackCommandController {
       }
 
       if (parsed.commandName === 'project cost') {
-        const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
         const stderrRaw = String(result.stderr || '').trim();
-        const stderr = stderrRaw ? this.formatter.clipText(this.formatter.formatPlainLinesAsBullets(stderrRaw)) : '';
-
-        if (stderr) {
-          const messages = this.buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
-          for (const message of messages) {
-            await this.postSlackMessage(client, channel, message, threadTs);
-          }
-          return true;
-        }
-
-        const messages = this.buildSplitPlainMessages(stdout);
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
+        if (stderrRaw) {
+          this.logger.warn('Project cost command returned stderr while building Excel', {
+            stderr: stderrRaw,
+          });
         }
 
         try {
