@@ -23,6 +23,7 @@ const WorklogSetupFlow = require('./flows/WorklogSetupFlow');
 const TimesheetReminderSetupFlow = require('./flows/TimesheetReminderSetupFlow');
 
 const chartGeneratorService = require('../services/chartGeneratorService');
+const excelReportService = require('../services/excelReportService');
 const fortnoxInvoiceService = require('../services/fortnoxInvoiceService');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
@@ -48,6 +49,7 @@ class SlackCommandController {
 
     this.formatter = new OutputFormatter({ maxOutputChars: MAX_OUTPUT_CHARS });
     this.pdfFormatter = new PDFReportFormatter();
+    this.excelReportService = excelReportService;
 
     this.userCostFlow = new UserCostSetupFlow({
       userRepository,
@@ -412,6 +414,29 @@ class SlackCommandController {
         throw new Error('Bot is missing files:write scope. Add the scope in Slack app settings and reinstall the app.');
       }
       this.logger.error('Failed to upload PDF file', {
+        error: error.message,
+        filename,
+      });
+      throw error;
+    }
+  }
+
+  async uploadExcelFile(client, channel, excelBuffer, filename, title, threadTs) {
+    try {
+      const response = await client.files.uploadV2({
+        channel_id: channel,
+        file: excelBuffer,
+        filename,
+        title,
+        thread_ts: threadTs,
+      });
+      return response;
+    } catch (error) {
+      if (error.message && error.message.includes('missing_scope')) {
+        throw new Error('Bot is missing files:write scope. Add the scope in Slack app settings and reinstall the app.');
+      }
+
+      this.logger.error('Failed to upload Excel file', {
         error: error.message,
         filename,
       });
@@ -1267,6 +1292,41 @@ class SlackCommandController {
     try {
       const result = await this.runReportingScript(config.scriptCommand, scriptArgument);
 
+      if (parsed.commandName === 'project cost total') {
+        try {
+          const reportData = this.formatter.extractJsonPayload(result.stdout);
+          if (!Array.isArray(reportData) || reportData.length === 0) {
+            await this.postSlackMessage(
+              client,
+              channel,
+              this.buildPlainMessagePayload('The report could not be converted to Excel. Please try again later.'),
+              threadTs
+            );
+            return true;
+          }
+
+          const excelBuffer = await this.excelReportService.buildProjectCostTotalWorkbook(reportData);
+          const periodLabel = reportData[0]?.period?.label ? `-${reportData[0].period.label}` : '';
+          const filename = `project-cost-total${periodLabel}-${Date.now()}.xlsx`;
+          const title = `Project cost total${reportData[0]?.period?.label ? ` - ${reportData[0].period.label}` : ''}`;
+
+          await this.uploadExcelFile(client, channel, excelBuffer, filename, title, threadTs);
+          return true;
+        } catch (excelError) {
+          logger.warn('Excel generation/upload failed', {
+            error: excelError.message,
+          });
+
+          await this.postSlackMessage(
+            client,
+            channel,
+            this.buildPlainMessagePayload('Excel upload failed. Please try again later.'),
+            threadTs
+          );
+          return true;
+        }
+      }
+
       // Special handling for forecast command: post text output, then generate chart
       if (parsed.commandName === 'forecast') {
         const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
@@ -1412,15 +1472,6 @@ class SlackCommandController {
 
       if (stderr) {
         const messages = this.buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
-        }
-        return true;
-      }
-
-      // For project cost total, use section-based splitting to preserve structure
-      if (parsed.commandName === 'project cost total') {
-        const messages = this.buildSectionBasedMessages(stdout);
         for (const message of messages) {
           await this.postSlackMessage(client, channel, message, threadTs);
         }
