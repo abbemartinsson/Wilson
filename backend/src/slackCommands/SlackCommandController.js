@@ -668,11 +668,12 @@ class SlackCommandController {
   formatFortnoxInvoiceTestMessage(result) {
     const invoiceLabel = result.invoicesChecked === 1 ? 'invoice' : 'invoices';
     const matchedLabel = result.matchedCount === 1 ? 'invoice' : 'invoices';
+    const projectNumber = result.projectNumber || result.projectKey;
     const lines = [
-      `Fortnox invoice test for ${result.projectKey}`,
+      `Fortnox invoice test for Jira key ${result.projectKey} / Fortnox project number ${projectNumber}`,
       result.userName ? `User: ${result.userName}` : null,
       `Checked ${result.invoicesChecked} ${invoiceLabel} across ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'}`,
-      `Matched ${result.matchedCount} ${matchedLabel} where pr matched ${result.projectKey}`,
+      `Matched ${result.matchedCount} ${matchedLabel} where the invoice project field matched ${projectNumber}`,
     ].filter(Boolean);
 
     if (result.refreshedToken) {

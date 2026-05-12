@@ -84,11 +84,15 @@ function getInvoiceProjectField(invoice) {
         invoice?.Project?.Project,
         invoice?.Project?.Number,
         invoice?.Project?.Id,
+        invoice?.Project?.Name,
+        invoice?.Project?.ProjectNumber,
         invoice?.project?.Value,
         invoice?.project?.Code,
         invoice?.project?.Project,
         invoice?.project?.Number,
         invoice?.project?.Id,
+        invoice?.project?.Name,
+        invoice?.project?.ProjectNumber,
     ];
 
     for (const candidate of candidates) {
@@ -112,19 +116,22 @@ function isProjectMatch(invoice, projectKey) {
     }
 
     const normalizedField = normalizeLookupValue(invoiceProjectField);
-    
-    // Exact match
+
     if (normalizedField === normalizedProjectKey) {
         return true;
     }
-    
-    // Prefix match: check if field starts with key followed by space, dash, or both
-    // Examples: "HJAR - Hjärnfonden", "HJAR Hjärnfonden", "HJAR-Hjärnfonden"
+
     if (normalizedField.startsWith(normalizedProjectKey + ' ') ||
         normalizedField.startsWith(normalizedProjectKey + '-')) {
         return true;
     }
-    
+
+    const escapedProjectKey = normalizedProjectKey.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const boundaryMatch = new RegExp(`(^|[^A-Z0-9])${escapedProjectKey}([^A-Z0-9]|$)`).test(normalizedField);
+    if (boundaryMatch) {
+        return true;
+    }
+
     return false;
 }
 
@@ -314,6 +321,7 @@ async function testFortnoxInvoiceLookup({ slackUserId, projectKey, logger = cons
         userId: user.id,
         userName: user.name || null,
         projectKey: normalizedProjectKey,
+        projectNumber: normalizedProjectKey,
         invoicesChecked: lookup.invoices.length,
         pagesFetched: lookup.pagesFetched,
         invoiceEndpoint: `${FORTNOX_API_BASE_URL}${FORTNOX_INVOICE_ENDPOINT}`,

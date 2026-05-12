@@ -113,7 +113,7 @@ const commandMap = {
   'fortnox invoice test': {
     customHandler: 'fortnox-invoice-test',
     requiresText: true,
-    usage: 'fortnox invoice test <project key or name>',
+    usage: 'fortnox invoice test <Jira project key / Fortnox project number>',
   },
 };
 
@@ -219,7 +219,7 @@ const COMMAND_USAGE_TEXT = {
 const COMMAND_SHORT_DESCRIPTIONS = {
   help: 'Shows all commands.',
   'fortnox login': 'Starts the Fortnox authorization flow.',
-  'fortnox invoice test': 'Tests invoice lookup for a project key.',
+  'fortnox invoice test': 'Tests invoice lookup using a Jira project key that should match the Fortnox project number.',
   'project info': 'Shows project details.',
   'project last week': 'Shows hours from last week.',
   'project cost': 'Shows total project cost, optionally for a specific year.',
