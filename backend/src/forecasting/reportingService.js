@@ -84,16 +84,22 @@ async function getProjectCost(projectKey, options = {}) {
 			});
 
 			if (invoiceResult.ok && invoiceResult.matchedCount > 0) {
-				const totalInvoiceNet = invoiceResult.totalInvoiceNet;
-				const grossMarginAmount = roundToTwoDecimals(totalInvoiceNet - result.totalCost);
-				const grossMarginPercent = totalInvoiceNet > 0 
-					? roundToTwoDecimals((grossMarginAmount / totalInvoiceNet) * 100)
+				const totalInvoiceNetSEK = invoiceResult.totalInvoiceNetSEK;
+				const grossMarginAmount = roundToTwoDecimals(totalInvoiceNetSEK - result.totalCost);
+				const grossMarginPercent = totalInvoiceNetSEK > 0 
+					? roundToTwoDecimals((grossMarginAmount / totalInvoiceNetSEK) * 100)
 					: null;
 
-				result.invoiceTotal = roundToTwoDecimals(totalInvoiceNet);
+				result.invoiceTotal = roundToTwoDecimals(totalInvoiceNetSEK);
 				result.grossMarginAmount = grossMarginAmount;
 				result.grossMarginPercent = grossMarginPercent;
 				result.invoiceMatchedCount = invoiceResult.matchedCount;
+				
+				// Store currency conversion details for logging/transparency
+				if (invoiceResult.currencyConversionApplied) {
+					result.invoiceCurrencyConversionApplied = true;
+					result.invoiceCurrencyConversions = invoiceResult.currencyConversionDetails;
+				}
 			}
 		} catch (error) {
 			// Non-fatal: if Fortnox lookup fails, continue without margin calculation

@@ -164,6 +164,16 @@ class OutputFormatter {
       lines.push(this.formatDetailLine('Margin %', `${percentStr}%`));
     }
 
+    // Add currency conversion note if applicable
+    if (report.invoiceCurrencyConversionApplied && Array.isArray(report.invoiceCurrencyConversions) && report.invoiceCurrencyConversions.length > 0) {
+      lines.push('');
+      lines.push('  💱 Currency conversions to SEK:');
+      for (const conversion of report.invoiceCurrencyConversions) {
+        const docNum = conversion.documentNumber ? ` (${conversion.documentNumber})` : '';
+        lines.push(`    - ${this.formatInlineCode(`${conversion.originalCurrency}: ${this.formatNumber(conversion.originalAmount)} × ${this.formatNumber(conversion.exchangeRate)} = ${this.formatNumber(conversion.convertedAmount)} SEK${docNum}`)}`);
+      }
+    }
+
     if (report.missingCostCount > 0) {
       lines.push(this.formatDetailLine('Missing cost', this.formatNumber(report.missingCostCount)));
     }
@@ -202,8 +212,8 @@ class OutputFormatter {
       lines.push('');
       lines.push('  Yearly breakdown:');
       for (const yearReport of report.previous_years) {
-        const costStr = yearReport.total_cost !== undefined && yearReport.total_cost !== null 
-          ? `, ${this.formatNumber(yearReport.total_cost ?? 0)} kr` 
+        const costStr = yearReport.total_cost !== undefined && yearReport.total_cost !== null
+          ? `, ${this.formatNumber(yearReport.total_cost ?? 0)} kr`
           : '';
         lines.push(`    - ${this.formatInlineCode(`${yearReport.year}: ${this.formatNumber(yearReport.total_hours ?? 0)} h${costStr}, ${this.formatNumber(yearReport.active_users ?? 0)} contributors`)}`);
       }

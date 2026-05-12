@@ -135,6 +135,28 @@ function isProjectMatch(invoice, projectKey) {
     return false;
 }
 
+function getInvoiceExchangeRate(invoice) {
+    if (!invoice) return null;
+
+    const candidates = [
+        invoice?.ExchangeRate,
+        invoice?.exchangeRate,
+        invoice?.CurrencyRate,
+        invoice?.currencyRate,
+        invoice?.Rate,
+        invoice?.rate,
+    ];
+
+    for (const candidate of candidates) {
+        if (candidate !== undefined && candidate !== null && String(candidate).trim() !== '') {
+            const rate = Number(candidate);
+            if (!Number.isNaN(rate) && rate > 0) return rate;
+        }
+    }
+
+    return null;
+}
+
 function summarizeInvoice(invoice) {
     return {
         documentNumber: invoice?.DocumentNumber ?? invoice?.InvoiceNumber ?? invoice?.Number ?? invoice?.CustomerInvoiceNumber ?? null,
@@ -472,24 +494,54 @@ async function getProjectInvoicesTotalByProjectKey({ userId, projectKey, startDa
     const matchedInvoices = lookup.invoices.filter((invoice) => isProjectMatch(invoice, normalizedProjectKey));
 
     // Calculate total invoice amount (net, excluding VAT) from all matched invoices.
-    // Prefer explicit net fields, fall back to computing from gross minus VAT or use gross if nothing else available.
-    const totalInvoiceNet = matchedInvoices.reduce((sum, invoice) => {
+    // Convert to SEK using exchange rates if currency is not SEK.
+    let totalInvoiceNetSEK = 0;
+    let currencyConversionDetails = [];
+    const DEFAULT_CURRENCY = 'SEK';
+
+    for (const invoice of matchedInvoices) {
         const net = getInvoiceNetAmount(invoice);
-        if (net !== null && !Number.isNaN(Number(net))) {
-            return sum + Number(net);
+        const invoiceAmount = net !== null && !Number.isNaN(Number(net))
+            ? Number(net)
+            : Number(invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? 0) || 0;
+
+        const currency = String(invoice?.Currency ?? invoice?.currency ?? DEFAULT_CURRENCY).trim().toUpperCase();
+        const exchangeRate = getInvoiceExchangeRate(invoice);
+
+        let amountInSEK = invoiceAmount;
+        let conversionApplied = false;
+
+        if (currency !== DEFAULT_CURRENCY && exchangeRate && exchangeRate > 0) {
+            amountInSEK = invoiceAmount * exchangeRate;
+            conversionApplied = true;
+            currencyConversionDetails.push({
+                documentNumber: invoice?.DocumentNumber ?? invoice?.InvoiceNumber ?? null,
+                originalCurrency: currency,
+                originalAmount: invoiceAmount,
+                exchangeRate: exchangeRate,
+                convertedAmount: amountInSEK,
+            });
+        } else if (currency !== DEFAULT_CURRENCY) {
+            // Currency is not SEK but no exchange rate found - log warning
+            logger.warn('Invoice with non-SEK currency but no exchange rate found', {
+                documentNumber: invoice?.DocumentNumber ?? invoice?.InvoiceNumber ?? null,
+                currency: currency,
+                amount: invoiceAmount,
+            });
         }
 
-        const invoiceTotal = invoice?.Total ?? invoice?.TotalAmount ?? invoice?.TotalToPay ?? invoice?.Gross ?? 0;
-        const amount = Number(invoiceTotal) || 0;
-        return sum + amount;
-    }, 0);
+        totalInvoiceNetSEK += amountInSEK;
+    }
 
     return {
         ok: true,
         userId: user.id,
         projectKey: normalizedProjectKey,
         matchedCount: matchedInvoices.length,
-        totalInvoiceNet: totalInvoiceNet,
+        totalInvoiceNet: totalInvoiceNetSEK,
+        totalInvoiceNetSEK: totalInvoiceNetSEK,
+        currencyConversionApplied: currencyConversionDetails.length > 0,
+        currencyConversionDetails: currencyConversionDetails.length > 0 ? currencyConversionDetails : null,
         refreshedToken: Boolean(lookup.refreshedToken),
     };
 }

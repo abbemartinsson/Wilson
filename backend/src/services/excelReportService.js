@@ -79,8 +79,14 @@ async function buildProjectCostTotalWorkbook(reports) {
 
   // Add gross margin totals if any invoices matched
   if (totalInvoice > 0) {
-    summaryRows.push({ metric: 'Total invoice', value: totalInvoice });
-    summaryRows.push({ metric: 'Total gross margin', value: totalGrossMargin });
+    summaryRows.push({ metric: 'Total invoice (SEK)', value: totalInvoice });
+    summaryRows.push({ metric: 'Total gross margin (SEK)', value: totalGrossMargin });
+  }
+
+  // Check if any conversions were done
+  const hasConversions = reportList.some(r => r.invoiceCurrencyConversionApplied === true);
+  if (hasConversions) {
+    summaryRows.push({ metric: 'Note', value: 'Invoice amounts converted to SEK using exchange rates' });
   }
 
   summarySheet.addRows(summaryRows);
@@ -204,16 +210,21 @@ async function buildProjectCostWorkbook(report) {
 
   // Add gross margin rows if invoice data is available
   if (report?.invoiceTotal !== undefined) {
-    summaryRows.push({ metric: 'Invoice total (net)', value: formatNumber(report.invoiceTotal) });
+    summaryRows.push({ metric: 'Invoice total (SEK)', value: formatNumber(report.invoiceTotal) });
   }
   if (report?.grossMarginAmount !== undefined) {
-    summaryRows.push({ metric: 'Gross margin', value: formatNumber(report.grossMarginAmount) });
+    summaryRows.push({ metric: 'Gross margin (SEK)', value: formatNumber(report.grossMarginAmount) });
   }
   if (report?.grossMarginPercent !== undefined) {
     summaryRows.push({ metric: 'Gross margin %', value: formatNumber(report.grossMarginPercent) });
   }
   if (report?.invoiceMatchedCount !== undefined) {
     summaryRows.push({ metric: 'Invoices matched', value: formatNumber(report.invoiceMatchedCount) });
+  }
+  
+  // Add currency conversion note if applicable
+  if (report?.invoiceCurrencyConversionApplied === true && Array.isArray(report?.invoiceCurrencyConversions) && report.invoiceCurrencyConversions.length > 0) {
+    summaryRows.push({ metric: 'Currency conversions', value: `${report.invoiceCurrencyConversions.length} invoices converted to SEK` });
   }
 
   summarySheet.addRows(summaryRows);
@@ -222,7 +233,7 @@ async function buildProjectCostWorkbook(report) {
   applyCurrencyFormat(summarySheet.getCell('B6'));
   applyNumberFormat(summarySheet.getCell('B7'));
   applyNumberFormat(summarySheet.getCell('B8'));
-  
+
   // Apply currency format to invoice total, gross margin amount
   let cellIndex = 9;
   if (report?.invoiceTotal !== undefined) {
@@ -237,7 +248,7 @@ async function buildProjectCostWorkbook(report) {
     applyNumberFormat(summarySheet.getCell(`B${cellIndex}`));
     cellIndex++;
   }
-  
+
   summarySheet.getColumn(1).alignment = { vertical: 'middle' };
   summarySheet.getColumn(2).alignment = { vertical: 'middle' };
 
@@ -308,6 +319,34 @@ async function buildProjectCostWorkbook(report) {
         activeUsers: formatNumber(yearReport?.active_users),
       });
       applyCurrencyFormat(row.getCell('totalCost'));
+    }
+  }
+
+  // Add currency conversion details sheet if applicable
+  if (report?.invoiceCurrencyConversionApplied === true && Array.isArray(report?.invoiceCurrencyConversions) && report.invoiceCurrencyConversions.length > 0) {
+    const currencySheet = workbook.addWorksheet('Currency conversions');
+    currencySheet.columns = [
+      { header: 'Invoice #', key: 'documentNumber', width: 18 },
+      { header: 'Original currency', key: 'originalCurrency', width: 18 },
+      { header: 'Original amount', key: 'originalAmount', width: 16 },
+      { header: 'Exchange rate', key: 'exchangeRate', width: 16 },
+      { header: 'Amount in SEK', key: 'convertedAmount', width: 16 },
+    ];
+    currencySheet.getRow(1).height = 20;
+    applyHeaderStyle(currencySheet.getRow(1));
+    currencySheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    for (const conversion of report.invoiceCurrencyConversions) {
+      const row = currencySheet.addRow({
+        documentNumber: formatText(conversion?.documentNumber, ''),
+        originalCurrency: formatText(conversion?.originalCurrency, ''),
+        originalAmount: formatNumber(conversion?.originalAmount),
+        exchangeRate: formatNumber(conversion?.exchangeRate),
+        convertedAmount: formatNumber(conversion?.convertedAmount),
+      });
+      applyCurrencyFormat(row.getCell('originalAmount'));
+      applyCurrencyFormat(row.getCell('convertedAmount'));
+      applyNumberFormat(row.getCell('exchangeRate'));
     }
   }
 
