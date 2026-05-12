@@ -25,6 +25,105 @@ function parsePositiveInt(value, fallback) {
   return parsed;
 }
 
+function parseProjectCostYear(yearInput) {
+  if (yearInput === undefined || yearInput === null || String(yearInput).trim() === '') {
+    return null;
+  }
+
+  const normalizedYear = String(yearInput).trim();
+  if (!/^\d{4}$/.test(normalizedYear)) {
+    throw new Error(`Invalid year: ${yearInput}`);
+  }
+
+  const year = Number.parseInt(normalizedYear, 10);
+  if (year < 1900 || year > 2100) {
+    throw new Error(`Invalid year: ${yearInput}`);
+  }
+
+  return year;
+}
+
+function parseProjectCostMonth(monthInput) {
+  if (monthInput === undefined || monthInput === null || String(monthInput).trim() === '') {
+    return null;
+  }
+
+  const normalizedMonth = String(monthInput)
+    .trim()
+    .toLowerCase()
+    .replace(/[.,!?;:]/g, '');
+
+  if (/^\d+$/.test(normalizedMonth)) {
+    const monthNumber = Number.parseInt(normalizedMonth, 10);
+    if (monthNumber < 1 || monthNumber > 12) {
+      throw new Error(`Invalid month: ${monthInput}`);
+    }
+    return monthNumber;
+  }
+
+  const monthNameMap = {
+    januari: 1,
+    jan: 1,
+    january: 1,
+    feb: 2,
+    februari: 2,
+    february: 2,
+    febuari: 2,
+    mars: 3,
+    mar: 3,
+    march: 3,
+    april: 4,
+    apr: 4,
+    maj: 5,
+    may: 5,
+    juni: 6,
+    jun: 6,
+    june: 6,
+    juli: 7,
+    jul: 7,
+    july: 7,
+    augusti: 8,
+    aug: 8,
+    august: 8,
+    september: 9,
+    sep: 9,
+    sept: 9,
+    oktober: 10,
+    okt: 10,
+    october: 10,
+    november: 11,
+    nov: 11,
+    december: 12,
+    dec: 12,
+  };
+
+  const monthNumber = monthNameMap[normalizedMonth];
+  if (!monthNumber) {
+    throw new Error(`Invalid month: ${monthInput}`);
+  }
+
+  return monthNumber;
+}
+
+function parseProjectCostPeriodOptions(yearInput, monthInput) {
+  const year = parseProjectCostYear(yearInput);
+  const month = parseProjectCostMonth(monthInput);
+
+  if (!year && month) {
+    throw new Error('Month filter requires year. Usage: project-cost <PROJECT_KEY_OR_NAME|total> [YEAR] [MONTH]');
+  }
+
+  const options = {};
+  if (year) {
+    options.year = year;
+  }
+  if (month) {
+    options.month = month;
+  }
+
+  return options;
+}
+
 async function main() {
   try {
     if (command === 'get-project-info') {
@@ -68,11 +167,14 @@ async function main() {
     if (command === 'project-cost') {
       const projectInput = process.argv[3];
       const yearInput = process.argv[4] ? String(process.argv[4]).trim() : null;
+      const monthInput = process.argv[5] ? String(process.argv[5]).trim() : null;
 
       if (!projectInput) {
-        console.error('Missing project key or name. Usage: npm run report:project-cost <PROJECT_KEY_OR_NAME> [YEAR]');
+        console.error('Missing project key or name. Usage: npm run report:project-cost <PROJECT_KEY_OR_NAME|total> [YEAR] [MONTH]');
         process.exit(1);
       }
+
+      const periodOptions = parseProjectCostPeriodOptions(yearInput, monthInput);
 
       const normalizedProjectInput = String(projectInput || '').trim().toLowerCase();
       // Support special case: aggregate costs for all projects using 'total' keyword
@@ -83,8 +185,8 @@ async function main() {
           for (const p of projects) {
             try {
               const report = reportingService.getProjectCostWithYears
-                ? await reportingService.getProjectCostWithYears(p.projectKey, yearInput ? { year: yearInput } : {})
-                : await reportingService.getProjectCost(p.projectKey, yearInput ? { year: yearInput } : {});
+                ? await reportingService.getProjectCostWithYears(p.projectKey, periodOptions)
+                : await reportingService.getProjectCost(p.projectKey, periodOptions);
 
               if (report) {
                 results.push(report);
@@ -106,8 +208,8 @@ async function main() {
       }
 
       const report = await reportingService.getProjectCostWithYears
-        ? await reportingService.getProjectCostWithYears(projectInput, yearInput ? { year: yearInput } : {})
-        : await reportingService.getProjectCost(projectInput, yearInput ? { year: yearInput } : {});
+        ? await reportingService.getProjectCostWithYears(projectInput, periodOptions)
+        : await reportingService.getProjectCost(projectInput, periodOptions);
 
       if (!report) {
         console.error(`No project found matching: ${projectInput}`);
@@ -271,7 +373,7 @@ async function main() {
     console.error('  project-worklog-report <PROJECT_KEY_OR_NAME> <week|month>');
     console.error('  project-worklog-team-report <PROJECT_KEY_OR_NAME> <week|month>');
     console.error('  project-participants <PROJECT_KEY_OR_NAME>');
-    console.error('  project-cost <PROJECT_KEY_OR_NAME> [YEAR]');
+    console.error('  project-cost <PROJECT_KEY_OR_NAME|total> [YEAR] [MONTH]');
     console.error('  list-projects');
     console.error('  workload-forecast [MONTHS]');
     console.error('  historical-comparison [MONTH] [YEAR] [YEARS_BACK]');

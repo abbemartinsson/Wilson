@@ -24,10 +24,10 @@ async function getProjectInfo(projectKey) {
 }
 
 async function getProjectCost(projectKey, options = {}) {
-	const yearRange = getYearRangeInStockholm(options.year);
-	const report = await analyticsRepository.getProjectCostReport(projectKey, yearRange ? {
-		startDate: yearRange.startDateUtc,
-		endDate: yearRange.endDateUtc,
+	const costRange = getProjectCostRangeInStockholm(options);
+	const report = await analyticsRepository.getProjectCostReport(projectKey, costRange ? {
+		startDate: costRange.startDateUtc,
+		endDate: costRange.endDateUtc,
 	} : {});
 
 	if (!report) {
@@ -59,16 +59,16 @@ async function getProjectCost(projectKey, options = {}) {
 			totalHours: roundToTwoDecimals(user.totalHours),
 		})),
 		missingCostCount: report.missingCostCount,
-		period: yearRange ? {
+		period: costRange ? {
 			timeZone: 'Europe/Stockholm',
-			startDate: yearRange.startDate,
-			endDate: yearRange.endDate,
-			label: String(yearRange.year),
+			startDate: costRange.startDate,
+			endDate: costRange.endDate,
+			label: costRange.label,
 		} : undefined,
 	};
 
 	// If no year filter, include the previous_years from the report which already has costs
-	if (!yearRange && report.previous_years) {
+	if (!costRange && report.previous_years) {
 		result.previous_years = report.previous_years;
 	}
 
@@ -79,11 +79,49 @@ async function getProjectCost(projectKey, options = {}) {
 async function getProjectCostWithYears(projectKey, options = {}) {
 	const base = await getProjectCost(projectKey, options);
 	if (!base) return null;
-	const yearRange = getYearRangeInStockholm(options.year);
-	if (!yearRange) {
+	const costRange = getProjectCostRangeInStockholm(options);
+	if (!costRange) {
 		await attachYearlyBreakdownToProjectCost(base, projectKey);
 	}
 	return base;
+}
+
+function getProjectCostRangeInStockholm(options = {}) {
+	const hasYear = options.year !== undefined && options.year !== null && String(options.year).trim() !== '';
+	const hasMonth = options.month !== undefined && options.month !== null && String(options.month).trim() !== '';
+
+	if (!hasYear && !hasMonth) {
+		return null;
+	}
+
+	if (!hasYear && hasMonth) {
+		throw new Error('Month filter requires year');
+	}
+
+	const yearRange = getYearRangeInStockholm(options.year);
+	if (!hasMonth) {
+		return {
+			...yearRange,
+			label: String(yearRange.year),
+		};
+	}
+
+	const month = Number.parseInt(String(options.month).trim(), 10);
+	if (!Number.isInteger(month) || month < 1 || month > 12) {
+		throw new Error(`Invalid month: ${options.month}`);
+	}
+
+	const monthRange = getMonthRangeInStockholm(yearRange.year, month);
+	const monthName = new Intl.DateTimeFormat('en-US', { month: 'long' }).format(
+		new Date(Date.UTC(yearRange.year, month - 1, 1))
+	);
+
+	return {
+		...monthRange,
+		year: yearRange.year,
+		month,
+		label: `${yearRange.year} ${monthName}`,
+	};
 }
 
 // Add yearly breakdown computed from same worklogs so sums match

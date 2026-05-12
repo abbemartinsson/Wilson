@@ -618,14 +618,10 @@ class SlackCommandController {
   parseProjectCostInput(inputText) {
     const normalizedInput = String(inputText || '').trim();
     if (!normalizedInput) {
-      return { projectInput: normalizedInput, yearNumber: null };
+      return { projectInput: normalizedInput, yearNumber: null, monthNumber: null };
     }
 
     const inputParts = normalizedInput.split(/\s+/);
-    if (inputParts.length < 2) {
-      return { projectInput: normalizedInput, yearNumber: null };
-    }
-
     const tryParseYearToken = (token) => {
       if (!/^\d{4}$/.test(token)) {
         return null;
@@ -635,11 +631,67 @@ class SlackCommandController {
       return parsedYear >= 1900 && parsedYear <= 2100 ? parsedYear : null;
     };
 
+    const tryParseMonthToken = (token) => {
+      const parsedMonth = this.parseHistoricalMonth(token);
+      if (!parsedMonth.ok || !parsedMonth.value) {
+        return null;
+      }
+
+      const monthNumber = Number.parseInt(parsedMonth.value, 10);
+      return Number.isInteger(monthNumber) && monthNumber >= 1 && monthNumber <= 12
+        ? monthNumber
+        : null;
+    };
+
+    const tryParseYearMonthPair = (firstToken, secondToken) => {
+      const firstYear = tryParseYearToken(firstToken);
+      const secondMonth = tryParseMonthToken(secondToken);
+      if (firstYear && secondMonth) {
+        return { yearNumber: firstYear, monthNumber: secondMonth };
+      }
+
+      const firstMonth = tryParseMonthToken(firstToken);
+      const secondYear = tryParseYearToken(secondToken);
+      if (firstMonth && secondYear) {
+        return { yearNumber: secondYear, monthNumber: firstMonth };
+      }
+
+      return null;
+    };
+
+    if (inputParts.length >= 2) {
+      const trailingPair = tryParseYearMonthPair(
+        inputParts[inputParts.length - 2],
+        inputParts[inputParts.length - 1]
+      );
+      if (trailingPair) {
+        return {
+          projectInput: inputParts.slice(0, -2).join(' ').trim(),
+          yearNumber: trailingPair.yearNumber,
+          monthNumber: trailingPair.monthNumber,
+        };
+      }
+
+      const leadingPair = tryParseYearMonthPair(inputParts[0], inputParts[1]);
+      if (leadingPair) {
+        return {
+          projectInput: inputParts.slice(2).join(' ').trim(),
+          yearNumber: leadingPair.yearNumber,
+          monthNumber: leadingPair.monthNumber,
+        };
+      }
+    }
+
+    if (inputParts.length < 2) {
+      return { projectInput: normalizedInput, yearNumber: null, monthNumber: null };
+    }
+
     const trailingYear = tryParseYearToken(inputParts[inputParts.length - 1]);
     if (trailingYear) {
       return {
         projectInput: inputParts.slice(0, -1).join(' ').trim(),
         yearNumber: trailingYear,
+        monthNumber: null,
       };
     }
 
@@ -648,10 +700,11 @@ class SlackCommandController {
       return {
         projectInput: inputParts.slice(1).join(' ').trim(),
         yearNumber: leadingYear,
+        monthNumber: null,
       };
     }
 
-    return { projectInput: normalizedInput, yearNumber: null };
+    return { projectInput: normalizedInput, yearNumber: null, monthNumber: null };
   }
 
   normalizeProjectInput(value = '') {
@@ -1112,11 +1165,19 @@ class SlackCommandController {
       return true;
     }
 
-    // Special handling for 'project cost total' - parse year but skip project resolution
+    // Special handling for 'project cost total' - parse year/month but skip project resolution
     if (parsed.commandName === 'project cost total') {
-      const yearMatch = inputText ? /(\d{4})/.exec(inputText) : null;
-      const yearNumber = yearMatch ? yearMatch[1] : null;
-      scriptArgument = yearNumber ? ['total', yearNumber] : 'total';
+      const parsedTotalCostInput = this.parseProjectCostInput(inputText);
+      const yearNumber = parsedTotalCostInput?.yearNumber;
+      const monthNumber = parsedTotalCostInput?.monthNumber;
+
+      if (yearNumber && monthNumber) {
+        scriptArgument = ['total', String(yearNumber), String(monthNumber)];
+      } else if (yearNumber) {
+        scriptArgument = ['total', String(yearNumber)];
+      } else {
+        scriptArgument = 'total';
+      }
     } else if (
       parsed.commandName === 'project info' ||
       parsed.commandName === 'project last week' ||
@@ -1196,6 +1257,25 @@ class SlackCommandController {
 
       if (resolvedProject) {
         scriptArgument = resolvedProject.projectKey;
+
+        if (parsed.commandName === 'project cost') {
+          const yearNumber =
+            parsedProjectCostInput &&
+            parsedProjectCostInput.projectInput === resolvedFromInput
+              ? parsedProjectCostInput.yearNumber
+              : null;
+          const monthNumber =
+            parsedProjectCostInput &&
+            parsedProjectCostInput.projectInput === resolvedFromInput
+              ? parsedProjectCostInput.monthNumber
+              : null;
+
+          if (yearNumber && monthNumber) {
+            scriptArgument = [resolvedProject.projectKey, String(yearNumber), String(monthNumber)];
+          } else if (yearNumber) {
+            scriptArgument = [resolvedProject.projectKey, String(yearNumber)];
+          }
+        }
 
         if (parsed.commandName === 'report w') {
           scriptArgument = [resolvedProject.projectKey, 'week'];
