@@ -445,6 +445,27 @@ class SlackCommandController {
     }
   }
 
+  buildExcelSummaryMessage({ periodLabel, totalHours, totalCost, invoiceTotal, grossMarginPercent }) {
+    const lines = ['• Excel report ready'];
+
+    if (periodLabel) {
+      lines.push(this.formatter.formatDetailLine('Period', this.formatter.escapeMrkdwn(periodLabel)));
+    }
+
+    lines.push(this.formatter.formatDetailLine('Hours', `${this.formatter.formatNumber(totalHours ?? 0)} h`));
+    lines.push(this.formatter.formatDetailLine('Total cost', this.formatter.formatCurrency(totalCost ?? 0)));
+
+    if (invoiceTotal !== undefined && invoiceTotal !== null) {
+      lines.push(this.formatter.formatDetailLine('Invoice total (SEK)', this.formatter.formatCurrency(invoiceTotal)));
+    }
+
+    if (grossMarginPercent !== undefined && grossMarginPercent !== null) {
+      lines.push(this.formatter.formatDetailLine('Gross margin %', `${this.formatter.formatNumber(grossMarginPercent)}%`));
+    }
+
+    return lines.join('\n');
+  }
+
   parseOptionalMonths(inputText) {
     if (!inputText) {
       return { ok: true, value: undefined };
@@ -1430,6 +1451,26 @@ class SlackCommandController {
           const filename = `project-cost-total${periodLabel}-${Date.now()}.xlsx`;
           const title = `Project cost total${reportData[0]?.period?.label ? ` - ${reportData[0].period.label}` : ''}`;
 
+          const totalHours = reportData.reduce((sum, report) => sum + Number(report?.totalHours || 0), 0);
+          const totalCost = reportData.reduce((sum, report) => sum + Number(report?.totalCost || 0), 0);
+          const totalInvoice = reportData.reduce((sum, report) => sum + Number(report?.invoiceTotal || 0), 0);
+          const totalGrossMarginPercent = totalInvoice > 0
+            ? ((totalInvoice - totalCost) / totalInvoice) * 100
+            : null;
+
+          await this.postSlackMessage(
+            client,
+            channel,
+            this.buildPlainMessagePayload(this.buildExcelSummaryMessage({
+              periodLabel: reportData[0]?.period?.label,
+              totalHours,
+              totalCost,
+              invoiceTotal: totalInvoice,
+              grossMarginPercent: totalGrossMarginPercent,
+            })),
+            threadTs
+          );
+
           await this.uploadExcelFile(client, channel, excelBuffer, filename, title, threadTs);
           return true;
         } catch (excelError) {
@@ -1512,6 +1553,19 @@ class SlackCommandController {
             : '';
           const filename = `project-cost-${safeProjectKey}${periodLabel}-${Date.now()}.xlsx`;
           const title = `Project cost${reportData.projectName ? ` - ${reportData.projectName}` : ''}${reportData.period?.label ? ` (${reportData.period.label})` : ''}`;
+
+          await this.postSlackMessage(
+            client,
+            channel,
+            this.buildPlainMessagePayload(this.buildExcelSummaryMessage({
+              periodLabel: reportData.period?.label,
+              totalHours: reportData.totalHours,
+              totalCost: reportData.totalCost,
+              invoiceTotal: reportData.invoiceTotal,
+              grossMarginPercent: reportData.grossMarginPercent,
+            })),
+            threadTs
+          );
 
           await this.uploadExcelFile(client, channel, excelBuffer, filename, title, threadTs);
           return true;

@@ -53,6 +53,10 @@ async function syncDaily() {
   const worklogsResult = await syncWorklogs();
   console.log(`    ✓ Synced ${worklogsResult ? worklogsResult.length : 0} worklogs`);
 
+  console.log('  → Syncing projects...');
+  const projectsResult = await syncProjects();
+  console.log(`    ✓ Synced ${projectsResult ? projectsResult.length : 0} projects`);
+
   console.log('  → Updating project timestamps...');
   const timestampsUpdated = await updateProjectTimestamps();
   console.log(`    ✓ Updated timestamps for ${timestampsUpdated} projects`);
