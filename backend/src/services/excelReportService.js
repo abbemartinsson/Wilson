@@ -148,6 +148,115 @@ async function buildProjectCostTotalWorkbook(reports) {
   return Buffer.from(await workbook.xlsx.writeBuffer());
 }
 
+async function buildProjectCostWorkbook(report) {
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'Wilson backend';
+  workbook.created = new Date();
+  workbook.modified = new Date();
+
+  const projectName = formatText(report?.projectName, 'Unknown project');
+  const projectKey = formatText(report?.projectKey, 'Unknown');
+  const periodLabel = formatText(report?.period?.label, 'All time');
+
+  const summarySheet = workbook.addWorksheet('Summary');
+  summarySheet.columns = [
+    { header: 'Metric', key: 'metric', width: 28 },
+    { header: 'Value', key: 'value', width: 28 },
+  ];
+  summarySheet.getRow(1).height = 20;
+  applyHeaderStyle(summarySheet.getRow(1));
+
+  summarySheet.addRows([
+    { metric: 'Project', value: projectName },
+    { metric: 'Project key', value: projectKey },
+    { metric: 'Period', value: periodLabel },
+    { metric: 'Total hours', value: formatNumber(report?.totalHours) },
+    { metric: 'Total cost', value: formatNumber(report?.totalCost) },
+    { metric: 'Participants', value: formatNumber(report?.participantCount) },
+    { metric: 'Missing cost users', value: formatNumber(report?.missingCostCount) },
+  ]);
+
+  applyNumberFormat(summarySheet.getCell('B5'));
+  applyCurrencyFormat(summarySheet.getCell('B6'));
+  applyNumberFormat(summarySheet.getCell('B7'));
+  applyNumberFormat(summarySheet.getCell('B8'));
+  summarySheet.getColumn(1).alignment = { vertical: 'middle' };
+  summarySheet.getColumn(2).alignment = { vertical: 'middle' };
+
+  const participantsSheet = workbook.addWorksheet('Participants');
+  participantsSheet.columns = [
+    { header: 'Name', key: 'name', width: 28 },
+    { header: 'Email', key: 'email', width: 30 },
+    { header: 'Hours', key: 'hours', width: 14 },
+    { header: 'Cost per hour', key: 'costPerHour', width: 14 },
+    { header: 'Total cost', key: 'totalCost', width: 14 },
+  ];
+  participantsSheet.getRow(1).height = 20;
+  applyHeaderStyle(participantsSheet.getRow(1));
+  participantsSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+  const participants = Array.isArray(report?.participants) ? report.participants : [];
+  for (const participant of participants) {
+    const row = participantsSheet.addRow({
+      name: formatText(participant?.name, 'Unknown'),
+      email: formatText(participant?.email, ''),
+      hours: formatNumber(participant?.totalHours),
+      costPerHour: formatNumber(participant?.costPerHour),
+      totalCost: formatNumber(participant?.totalCost),
+    });
+
+    applyCurrencyFormat(row.getCell('costPerHour'));
+    applyCurrencyFormat(row.getCell('totalCost'));
+  }
+
+  const missingCostUsers = Array.isArray(report?.missingCostUsers) ? report.missingCostUsers : [];
+  if (missingCostUsers.length > 0) {
+    const missingSheet = workbook.addWorksheet('Missing cost users');
+    missingSheet.columns = [
+      { header: 'Name', key: 'name', width: 28 },
+      { header: 'Email', key: 'email', width: 30 },
+      { header: 'Hours', key: 'hours', width: 14 },
+    ];
+    missingSheet.getRow(1).height = 20;
+    applyHeaderStyle(missingSheet.getRow(1));
+    missingSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    for (const user of missingCostUsers) {
+      missingSheet.addRow({
+        name: formatText(user?.name, 'Unknown'),
+        email: formatText(user?.email, ''),
+        hours: formatNumber(user?.totalHours),
+      });
+    }
+  }
+
+  if (Array.isArray(report?.previous_years) && report.previous_years.length > 0) {
+    const breakdownSheet = workbook.addWorksheet('Yearly breakdown');
+    breakdownSheet.columns = [
+      { header: 'Year', key: 'year', width: 16 },
+      { header: 'Total hours', key: 'totalHours', width: 14 },
+      { header: 'Total cost', key: 'totalCost', width: 14 },
+      { header: 'Active users', key: 'activeUsers', width: 14 },
+    ];
+    breakdownSheet.getRow(1).height = 20;
+    applyHeaderStyle(breakdownSheet.getRow(1));
+    breakdownSheet.views = [{ state: 'frozen', ySplit: 1 }];
+
+    for (const yearReport of report.previous_years) {
+      const row = breakdownSheet.addRow({
+        year: formatText(yearReport?.year, 'Unknown'),
+        totalHours: formatNumber(yearReport?.total_hours),
+        totalCost: formatNumber(yearReport?.total_cost),
+        activeUsers: formatNumber(yearReport?.active_users),
+      });
+      applyCurrencyFormat(row.getCell('totalCost'));
+    }
+  }
+
+  return Buffer.from(await workbook.xlsx.writeBuffer());
+}
+
 module.exports = {
+  buildProjectCostWorkbook,
   buildProjectCostTotalWorkbook,
 };

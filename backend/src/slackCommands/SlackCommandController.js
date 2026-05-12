@@ -1408,6 +1408,63 @@ class SlackCommandController {
         }
       }
 
+      if (parsed.commandName === 'project cost') {
+        const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
+        const stderrRaw = String(result.stderr || '').trim();
+        const stderr = stderrRaw ? this.formatter.clipText(this.formatter.formatPlainLinesAsBullets(stderrRaw)) : '';
+
+        if (stderr) {
+          const messages = this.buildMultiMessagePayload('Warnings', [stdout, stderr].filter(Boolean).join('\n\n'), false);
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
+          }
+          return true;
+        }
+
+        const messages = this.buildSplitPlainMessages(stdout);
+        for (const message of messages) {
+          await this.postSlackMessage(client, channel, message, threadTs);
+        }
+
+        try {
+          const reportData = this.formatter.extractJsonPayload(result.stdout);
+          if (!reportData || typeof reportData !== 'object' || Array.isArray(reportData)) {
+            await this.postSlackMessage(
+              client,
+              channel,
+              this.buildPlainMessagePayload('The report could not be converted to Excel. Please try again later.'),
+              threadTs
+            );
+            return true;
+          }
+
+          const excelBuffer = await this.excelReportService.buildProjectCostWorkbook(reportData);
+          const safeProjectKey = String(reportData.projectKey || 'project')
+            .toLowerCase()
+            .replace(/[^a-z0-9_-]+/g, '-');
+          const periodLabel = reportData.period?.label
+            ? `-${String(reportData.period.label).toLowerCase().replace(/[^a-z0-9_-]+/g, '-')}`
+            : '';
+          const filename = `project-cost-${safeProjectKey}${periodLabel}-${Date.now()}.xlsx`;
+          const title = `Project cost${reportData.projectName ? ` - ${reportData.projectName}` : ''}${reportData.period?.label ? ` (${reportData.period.label})` : ''}`;
+
+          await this.uploadExcelFile(client, channel, excelBuffer, filename, title, threadTs);
+          return true;
+        } catch (excelError) {
+          logger.warn('Project cost Excel generation/upload failed', {
+            error: excelError.message,
+          });
+
+          await this.postSlackMessage(
+            client,
+            channel,
+            this.buildPlainMessagePayload('Excel upload failed. Please try again later.'),
+            threadTs
+          );
+          return true;
+        }
+      }
+
       // Special handling for forecast command: post text output, then generate chart
       if (parsed.commandName === 'forecast') {
         const stdout = this.formatter.clipText(this.formatter.formatCommandOutput(parsed.commandName, result.stdout));
