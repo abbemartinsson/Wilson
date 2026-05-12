@@ -169,18 +169,72 @@ class SlackCommandController {
 
     const safeBody = body && body.trim() ? body.trim() : 'No output.';
 
+    // Slack limits section text to 3000 characters. Split into multiple
+    // section blocks when necessary to avoid `invalid_blocks` errors.
+    const MAX_SECTION_CHARS = 3000;
+
+    const blocks = this.splitTextIntoBlocks(safeBody, MAX_SECTION_CHARS);
+
+    // Set a concise fallback `text` property (used in notifications/previews)
+    const fallbackText = safeBody.length > 2000 ? `${safeBody.slice(0, 1997)}...` : safeBody;
+
     return {
-      text: safeBody,
-      blocks: [
+      text: fallbackText,
+      blocks,
+    };
+  }
+
+  splitTextIntoBlocks(text = '', maxChars = 3000) {
+    const safe = String(text || '');
+    if (safe.length === 0) {
+      return [
         {
           type: 'section',
-          text: {
-            type: 'mrkdwn',
-            text: safeBody,
-          },
+          text: { type: 'mrkdwn', text: 'No output.' },
         },
-      ],
-    };
+      ];
+    }
+
+    if (safe.length <= maxChars) {
+      return [
+        {
+          type: 'section',
+          text: { type: 'mrkdwn', text: safe },
+        },
+      ];
+    }
+
+    const lines = safe.split('\n');
+    const chunks = [];
+    let current = '';
+
+    for (const line of lines) {
+      if ((current.length ? current.length + 1 + line.length : line.length) <= maxChars) {
+        current = current ? `${current}\n${line}` : line;
+        continue;
+      }
+
+      if (current) {
+        chunks.push(current);
+        current = '';
+      }
+
+      if (line.length <= maxChars) {
+        current = line;
+        continue;
+      }
+
+      // If a single line is longer than maxChars, hard-split it.
+      for (let i = 0; i < line.length; i += maxChars) {
+        chunks.push(line.slice(i, i + maxChars));
+      }
+    }
+
+    if (current) {
+      chunks.push(current);
+    }
+
+    return chunks.map((c) => ({ type: 'section', text: { type: 'mrkdwn', text: c } }));
   }
 
   buildMultiMessagePayload(_title, body, _isError = false, options = {}) {
@@ -971,29 +1025,29 @@ class SlackCommandController {
       }
 
       if (!resolvedProject) {
-          if (firstMultipleMatch) {
-            const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
-            const messages = this.buildMultiMessagePayload(
-              'Multiple projects matched',
-              `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
-              true
-            );
-            for (const message of messages) {
-              await this.postSlackMessage(client, channel, message, threadTs);
-            }
-            return true;
-          } else {
-            const messages = this.buildMultiMessagePayload(
-              'Project not found',
-              `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
-              true
-            );
-            for (const message of messages) {
-              await this.postSlackMessage(client, channel, message, threadTs);
-            }
-            return true;
+        if (firstMultipleMatch) {
+          const options = this.formatProjectOptions(firstMultipleMatch.resolution.candidates);
+          const messages = this.buildMultiMessagePayload(
+            'Multiple projects matched',
+            `Please be more specific. I found these matches for "${firstMultipleMatch.input}":\n${options}\n\n${roleAwareHelpMessage}`,
+            true
+          );
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
           }
+          return true;
+        } else {
+          const messages = this.buildMultiMessagePayload(
+            'Project not found',
+            `No project matched "${projectInputForResolution}".\n\n${roleAwareHelpMessage}`,
+            true
+          );
+          for (const message of messages) {
+            await this.postSlackMessage(client, channel, message, threadTs);
+          }
+          return true;
         }
+      }
 
       if (resolvedProject) {
         scriptArgument = resolvedProject.projectKey;
