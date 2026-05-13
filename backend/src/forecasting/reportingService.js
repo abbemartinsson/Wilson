@@ -122,7 +122,8 @@ async function getProjectCostWithYears(projectKey, options = {}) {
 	const base = await getProjectCost(projectKey, options);
 	if (!base) return null;
 	const costRange = getProjectCostRangeInStockholm(options);
-	if (!costRange) {
+	if (!costRange && (!Array.isArray(base.previous_years) || base.previous_years.length === 0)) {
+		// Use fallback yearly aggregation only when repository output is missing.
 		await attachYearlyBreakdownToProjectCost(base, projectKey);
 	}
 	return base;
