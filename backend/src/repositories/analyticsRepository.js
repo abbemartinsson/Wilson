@@ -266,7 +266,7 @@ function getExcludedProjectNameSet() {
 	const excludedNames = [
 		'kruso website 2025',
 		'lia malmö',
-		'sweden interanl - planned absence',
+		'sweden internal - planned absence',
 		'sweden internal work',
 	];
 
