@@ -110,17 +110,11 @@ const commandMap = {
     customHandler: 'fortnox-login',
     usage: 'fortnox login',
   },
-  'fortnox invoice test': {
-    customHandler: 'fortnox-invoice-test',
-    requiresText: true,
-    usage: 'fortnox invoice test <Jira project key / Fortnox project number>',
-  },
 };
 
 const ROLE_PERMISSION_CONFIG = {
   admin: {
     all: true,
-    exclude: ['fortnox login'],
   },
   member: {
     commands: [
@@ -143,7 +137,6 @@ const ROLE_PERMISSION_CONFIG = {
     commands: [
       'help',
       'fortnox login',
-      'fortnox invoice test',
       'project info',
       'project last week',
       'report w',
@@ -219,7 +212,6 @@ const COMMAND_USAGE_TEXT = {
 const COMMAND_SHORT_DESCRIPTIONS = {
   help: 'Shows all commands.',
   'fortnox login': 'Starts the Fortnox authorization flow.',
-  'fortnox invoice test': 'Tests invoice lookup using a Jira project key that should match the Fortnox project number.',
   'project info': 'Shows project details.',
   'project last week': 'Shows hours from last week.',
   'project cost': 'Shows total project cost, optionally for a specific year or month (with year).',
@@ -281,7 +273,7 @@ const HELP_COMMAND_GROUPS = [
   {
     title: 'Integrations',
     emoji: '🔗',
-    commands: ['fortnox login', 'fortnox invoice test'],
+    commands: ['fortnox login'],
   },
 ];
 

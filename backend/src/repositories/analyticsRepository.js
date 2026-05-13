@@ -69,23 +69,30 @@ async function findProjectByKeyOrName(input) {
 	}
 
 	if (byKey) {
-		return byKey;
+		const excluded = getExcludedProjectNameSet();
+		if (!excluded.has(String(byKey.name || '').trim().toLowerCase())) {
+			return byKey;
+		}
+		// If matched project is excluded, fall through to name search
 	}
 
 	// If not found by key, try to find by name (case-insensitive)
-	const { data: byName, error: nameError } = await supabase
+	const { data: byNameList, error: nameError } = await supabase
 		.from(PROJECTS_TABLE)
 		.select('id, jira_project_key, name, start_date, last_logged_issue')
 		.ilike('name', `%${input}%`)
 		.order('name', { ascending: true })
-		.limit(1)
-		.maybeSingle();
+		.limit(10);
 
 	if (nameError) {
 		throw nameError;
 	}
 
-	return byName || null;
+	const list = byNameList || [];
+	const excluded = getExcludedProjectNameSet();
+	const firstNonExcluded = list.find((p) => !excluded.has(String(p.name || '').trim().toLowerCase()));
+
+	return firstNonExcluded || null;
 }
 
 async function findProjectByKey(projectKey) {
@@ -211,7 +218,9 @@ async function searchProjects(query) {
 		throw error;
 	}
 
-	return data || [];
+	const results = data || [];
+	const excluded = getExcludedProjectNameSet();
+	return results.filter((p) => !excluded.has(String(p.name || '').trim().toLowerCase()));
 }
 
 /**
@@ -243,13 +252,25 @@ async function getAllProjects() {
 			throw error;
 		}
 
-		const batch = data || [];
-		projects.push(...batch);
+				const batch = data || [];
+				projects.push(...batch);
 		hasMore = batch.length === pageSize;
 		from += pageSize;
 	}
 
-	return projects;
+	const excluded = getExcludedProjectNameSet();
+	return projects.filter((p) => !excluded.has(String(p.name || '').trim().toLowerCase()));
+}
+// internal/non billable projects
+function getExcludedProjectNameSet() {
+	const excludedNames = [
+		'kruso website 2025',
+		'lia malmö',
+		'sweden interanl - planned absence',
+		'sweden internal work',
+	];
+
+	return new Set(excludedNames.map((n) => String(n || '').trim().toLowerCase()));
 }
 
 /**

@@ -25,7 +25,6 @@ const TimesheetReminderSetupFlow = require('./flows/TimesheetReminderSetupFlow')
 
 const chartGeneratorService = require('../services/chartGeneratorService');
 const excelReportService = require('../services/excelReportService');
-const fortnoxInvoiceService = require('../services/fortnoxInvoiceService');
 
 const PROJECT_ROOT = path.join(__dirname, '..', '..');
 const REPORTING_SCRIPT_PATH = path.join(__dirname, '..', 'scripts', 'reporting.js');
@@ -740,46 +739,6 @@ class SlackCommandController {
       .join('\n');
   }
 
-  formatFortnoxInvoiceTestMessage(result) {
-    const invoiceLabel = result.invoicesChecked === 1 ? 'invoice' : 'invoices';
-    const matchedLabel = result.matchedCount === 1 ? 'invoice' : 'invoices';
-    const projectNumber = result.projectNumber || result.projectKey;
-    const lines = [
-      `Fortnox invoice test for Jira key ${result.projectKey} / Fortnox project number ${projectNumber}`,
-      result.userName ? `User: ${result.userName}` : null,
-      `Checked ${result.invoicesChecked} ${invoiceLabel} across ${result.pagesFetched} page${result.pagesFetched === 1 ? '' : 's'}`,
-      `Matched ${result.matchedCount} ${matchedLabel} where the invoice project field matched ${projectNumber}`,
-      result.totalCost ? `*Total cost: ${result.totalCost.toLocaleString('sv-SE')} ${result.firstMatch?.currency || 'SEK'}*` : null,
-    ].filter(Boolean);
-
-    if (result.refreshedToken) {
-      lines.push('Fortnox access token was refreshed during this lookup.');
-    }
-
-    if (!result.firstMatch) {
-      lines.push('', 'No matching invoice found.', `Endpoint: ${result.invoiceEndpoint}`);
-      return lines.join('\n');
-    }
-
-    lines.push('', 'First match:');
-    lines.push(`- documentNumber: ${result.firstMatch.documentNumber ?? 'n/a'}`);
-    lines.push(`- invoiceDate: ${result.firstMatch.invoiceDate ?? 'n/a'}`);
-    lines.push(`- total: ${result.firstMatch.total ?? 'n/a'}`);
-    lines.push(`- currency: ${result.firstMatch.currency ?? 'n/a'}`);
-    lines.push(`- status: ${result.firstMatch.status ?? 'n/a'}`);
-    lines.push(`- projectField: ${result.firstMatch.projectField ?? 'n/a'}`);
-
-    if (Array.isArray(result.matchedInvoices) && result.matchedInvoices.length > 1) {
-      const otherMatches = result.matchedInvoices.slice(1, 5).map((invoice, index) => {
-        return `${index + 2}. ${invoice.documentNumber ?? 'n/a'} | ${invoice.invoiceDate ?? 'n/a'} | ${invoice.total ?? 'n/a'} | pr=${invoice.projectField ?? 'n/a'}`;
-      });
-
-      lines.push('', 'Other matches:', ...otherMatches);
-    }
-
-    lines.push('', `Endpoint: ${result.invoiceEndpoint}`);
-    return lines.join('\n');
-  }
 
   async resolveProjectKey(inputText) {
     const normalizedInput = String(inputText || '').trim();
@@ -1090,84 +1049,7 @@ class SlackCommandController {
       return true;
     }
 
-    if (config.customHandler === 'fortnox-invoice-test') {
-      if (!slackUserId) {
-        await this.postSlackMessage(
-          client,
-          channel,
-          this.buildPlainMessagePayload('I could not identify your Slack account.'),
-          threadTs
-        );
-        return true;
-      }
-
-      if (!inputText) {
-        await this.postSlackMessage(
-          client,
-          channel,
-          this.buildPlainMessagePayload(`ℹ️ Missing required input.\nUsage: \`${config.usage}\``),
-          threadTs
-        );
-        return true;
-      }
-
-      const resolution = await this.resolveProjectKey(inputText);
-      if (!resolution) {
-        const messages = this.buildMultiMessagePayload(
-          'Project not found',
-          `No project matched "${inputText}".\n\n${roleAwareHelpMessage}`,
-          true
-        );
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
-        }
-        return true;
-      }
-
-      if (resolution.matchedBy === 'multiple') {
-        const options = this.formatProjectOptions(resolution.candidates);
-        const messages = this.buildMultiMessagePayload(
-          'Multiple projects matched',
-          `Please be more specific. I found these matches for "${inputText}":\n${options}\n\n${roleAwareHelpMessage}`,
-          true
-        );
-        for (const message of messages) {
-          await this.postSlackMessage(client, channel, message, threadTs);
-        }
-        return true;
-      }
-
-      try {
-        const result = await fortnoxInvoiceService.testFortnoxInvoiceLookup({
-          slackUserId,
-          projectKey: resolution.projectKey,
-          logger,
-        });
-
-        const body = this.formatFortnoxInvoiceTestMessage(result);
-        await this.postSlackMessage(client, channel, this.buildPlainMessagePayload(body), threadTs);
-        return true;
-      } catch (error) {
-        logger.error('Fortnox invoice test failed', {
-          error: error.message,
-          code: error.code,
-          slackUserId,
-          projectKey: resolution.projectKey,
-        });
-
-        const message = error.code === 'FORTNOX_NOT_CONNECTED'
-          ? 'Fortnox is not connected for this user. Run fortnox login first.'
-          : `Fortnox invoice test failed: ${error.message || 'unknown error'}`;
-
-        await this.postSlackMessage(
-          client,
-          channel,
-          this.buildPlainMessagePayload(message),
-          threadTs
-        );
-        return true;
-      }
-    }
+    
 
     let scriptArgument = inputText || undefined;
     let projectInputForResolution = inputText;
